@@ -1,0 +1,9 @@
+Parameter passing:
+    RCX, RDX, R8, and R9 (in that order)
+    All others are passed on stack
+
+Volatile registers:
+    RAX, R10, R11, XMM4, and XMM5
+
+All others are nonvolatile
+    
