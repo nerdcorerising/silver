@@ -4,8 +4,9 @@ fn main() -> int {
     let y = function(11);
     x = function(-3);
     let z = function(0);
+    let p = functionWhile();
 
-    return x + y + z;
+    return x + y + z + p;
 }
 
 fn function(a: int) -> int {
@@ -16,4 +17,16 @@ fn function(a: int) -> int {
     } else {
         return -3;
     }
+}
+
+fn functionWhile() -> int {
+    let x: int;
+    x = 0;
+
+    while (x < 10)
+    {
+        x = x + 1;
+    }
+
+    return x;
 }
