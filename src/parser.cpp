@@ -17,6 +17,82 @@ namespace parse
 
     }
 
+    void Parser::expectCurrentTokenType(TokenType type, string message)
+    {
+        expectTokenType(current(), type, message);
+    }
+    
+    void Parser::expectCurrentTokenText(string text, string message)
+    {
+        expectTokenText(current(), text, message);
+    }
+    
+    void Parser::expectCurrentTokenTypeAndText(TokenType type, string text, string message)
+    {
+        expectCurrentTokenType(type, message);
+        expectCurrentTokenText(text, message);
+    }
+
+    void Parser::expectTokenType(Token token, TokenType type, string message)
+    {
+        if (token.type() != type)
+        {
+            PARSE_ERROR(message);
+        }
+    }
+    
+    void Parser::expectTokenText(Token token, string text, string message)
+    {
+        if (token.text() != text)
+        {
+            PARSE_ERROR(message);
+        }
+    }
+    
+    void Parser::expectTokenTypeAndText(Token token, TokenType type, string text, string message)
+    {
+        expectTokenType(token, type, message);
+        expectTokenText(token, text, message);
+    }
+
+    void Parser::advance()
+    {
+        mTokens.advance();
+    }
+
+    Token Parser::current()
+    {
+        Token token;
+        if (!mTokens.tryGetCurrent(token))
+        {
+            PARSE_ERROR("Unexpected end of input");
+        }
+
+        return token;
+    }
+
+    Token Parser::lookAhead()
+    {
+        Token token;
+        if (!mTokens.tryGetLookAhead(token))
+        {
+            PARSE_ERROR("Unexpected end of input");
+        }
+
+        return token;
+    }
+
+    Token Parser::lookAheadBy(size_t pos)
+    {
+        Token token;
+        if (!mTokens.tryGetLookAheadBy(pos, token))
+        {
+            PARSE_ERROR("Unexpected end of input");
+        }
+
+        return token;
+    }
+
     vector<shared_ptr<Argument>> Parser::parseArgumentsForDeclaration()
     {
         expectCurrentTokenType(TokenType::OpenParens, "Unexpected token after function name");
@@ -120,7 +196,7 @@ namespace parse
         advance();
 
         vector<shared_ptr<Expression>> args;
-        for (;;)
+        while (current().type() != TokenType::CloseParens)
         {
             shared_ptr<Expression> arg = makeNode();
             if (current().type() != TokenType::Comma && current().type() != TokenType::CloseParens)
@@ -130,13 +206,10 @@ namespace parse
 
             args.push_back(arg);
 
-            if (current().type() == TokenType::CloseParens)
+            if (current().type() == TokenType::Comma)
             {
-                break;
+                advance();
             }
-
-            ASSERT(current().type() == TokenType::Comma);
-            advance();
         }
 
         expectCurrentTokenType(TokenType::CloseParens, "Expected close parens to close argument list");
@@ -310,11 +383,21 @@ namespace parse
                 advance();
                 shared_ptr<Expression> ret = parseStatement();
 
-                return shared_ptr<Expression>(new ReturnNode(ret));
+                shared_ptr<Expression> returnStatement = shared_ptr<Expression>(new ReturnNode(ret));
+
+                expectCurrentTokenType(TokenType::SemiColon, "Expected semicolon after statement.");
+                advance();
+
+                return returnStatement;
             }
             else if (curr.text() == "let")
             {
-                return parseLet();
+                shared_ptr<Expression> let = parseLet();
+
+                expectCurrentTokenType(TokenType::SemiColon, "Expected semicolon after statement.");
+                advance();
+
+                return let;
             }
             else if (curr.text() == "if")
             {
@@ -440,81 +523,5 @@ namespace parse
         }
 
         return shared_ptr<Assembly>(new Assembly(mName, functions));
-    }
-
-    void Parser::expectCurrentTokenType(TokenType type, string message)
-    {
-        expectTokenType(current(), type, message);
-    }
-    
-    void Parser::expectCurrentTokenText(string text, string message)
-    {
-        expectTokenText(current(), text, message);
-    }
-    
-    void Parser::expectCurrentTokenTypeAndText(TokenType type, string text, string message)
-    {
-        expectCurrentTokenType(type, message);
-        expectCurrentTokenText(text, message);
-    }
-
-    void Parser::expectTokenType(Token token, TokenType type, string message)
-    {
-        if (token.type() != type)
-        {
-            PARSE_ERROR(message);
-        }
-    }
-    
-    void Parser::expectTokenText(Token token, string text, string message)
-    {
-        if (token.text() != text)
-        {
-            PARSE_ERROR(message);
-        }
-    }
-    
-    void Parser::expectTokenTypeAndText(Token token, TokenType type, string text, string message)
-    {
-        expectTokenType(token, type, message);
-        expectTokenText(token, text, message);
-    }
-
-    void Parser::advance()
-    {
-        mTokens.advance();
-    }
-
-    Token Parser::current()
-    {
-        Token token;
-        if (!mTokens.tryGetCurrent(token))
-        {
-            PARSE_ERROR("Unexpected end of input");
-        }
-
-        return token;
-    }
-
-    Token Parser::lookAhead()
-    {
-        Token token;
-        if (!mTokens.tryGetLookAhead(token))
-        {
-            PARSE_ERROR("Unexpected end of input");
-        }
-
-        return token;
-    }
-
-    Token Parser::lookAheadBy(size_t pos)
-    {
-        Token token;
-        if (!mTokens.tryGetLookAheadBy(pos, token))
-        {
-            PARSE_ERROR("Unexpected end of input");
-        }
-
-        return token;
     }
 }

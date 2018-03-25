@@ -38,13 +38,13 @@ namespace parse
         if (!mTokenizer.ready())
         {
             token = mTokenizer.flush();
-            return false;
         }
         else
         {
             token = mTokenizer.dispense();
-            return true;
         }
+
+        return (token.type() != TokenType::Error) || mInput.good();
     }
 
     bool TokenManager::getNextNonWhitespaceToken(Token &token)
