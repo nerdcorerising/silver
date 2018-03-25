@@ -26,7 +26,10 @@ namespace ast
         Declaration,
         FunctionCall,
         Return,
-        Cast
+        Cast,
+        If,
+        ElseIf,
+        While
     };
 
     class Argument
@@ -227,6 +230,55 @@ namespace ast
         std::string getName();
         size_t argCount();
         std::vector<std::shared_ptr<Expression>> getArgs();
+        virtual ExpressionType getExpressionType() override;
+        virtual void prettyPrint(std::ostream &out, size_t indent = 0) override;
+    };
+
+    class ElseIfNode : public Expression
+    {
+    private:
+        std::shared_ptr<Expression> mCondition;
+        std::shared_ptr<Block> mBlock;
+
+    public:
+        ElseIfNode(std::shared_ptr<Expression> condition, std::shared_ptr<Block> block);
+        std::shared_ptr<Expression> getCondition();
+        std::shared_ptr<Block> getBlock();
+        virtual ExpressionType getExpressionType() override;
+        virtual void prettyPrint(std::ostream &out, size_t indent = 0) override;
+    };
+
+    class IfNode : public Expression
+    {
+    private:
+        std::shared_ptr<Expression> mCondition;
+        std::shared_ptr<Block> mIfBlock;
+        std::vector<std::shared_ptr<ElseIfNode>> mElseIfs;
+        std::shared_ptr<Block> mElseBlock;
+
+    public:
+        IfNode(std::shared_ptr<Expression> condition, 
+               std::shared_ptr<Block> ifBlock, 
+               std::vector<std::shared_ptr<ElseIfNode>> elseIfs, 
+               std::shared_ptr<Block> elseBlock);
+        std::shared_ptr<Expression> getCondition();
+        std::shared_ptr<Block> getIfBlock();
+        std::vector<std::shared_ptr<ElseIfNode>> getElseIfs();
+        std::shared_ptr<Block> getElseBlock();
+        virtual ExpressionType getExpressionType() override;
+        virtual void prettyPrint(std::ostream &out, size_t indent = 0) override;
+    };
+
+    class WhileNode : public Expression
+    {
+    private:
+        std::shared_ptr<Expression> mCondition;
+        std::shared_ptr<Block> mBlock;
+
+    public:
+        WhileNode(std::shared_ptr<Expression> condition, std::shared_ptr<Block> block);
+        std::shared_ptr<Expression> getCondition();
+        std::shared_ptr<Block> getBlock();
         virtual ExpressionType getExpressionType() override;
         virtual void prettyPrint(std::ostream &out, size_t indent = 0) override;
     };

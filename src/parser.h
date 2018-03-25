@@ -24,6 +24,7 @@ namespace parse
         std::shared_ptr<ast::Function> parseFunction();
         std::shared_ptr<ast::Block> parseBlock();
 
+        std::shared_ptr<ast::Expression> parseIfWhileCondition();
         std::shared_ptr<ast::Expression> parseWhile();
         std::shared_ptr<ast::Expression> parseIf();
         std::shared_ptr<ast::Expression> parseLet();

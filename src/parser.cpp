@@ -292,9 +292,6 @@ namespace parse
             exp = node;
         }
 
-        expectCurrentTokenType(TokenType::SemiColon, "Expected semicolon after statement.");
-
-        advance();
         return exp;
     }
 
@@ -330,18 +327,70 @@ namespace parse
         }
         else
         {
-            return parseStatement();
+            shared_ptr<Expression> statement = parseStatement();
+            expectCurrentTokenType(TokenType::SemiColon, "Expected semicolon after statement.");
+            advance();
+            return statement;
         }
+    }
+
+    shared_ptr<Expression> Parser::parseIfWhileCondition()
+    {        
+        expectCurrentTokenType(TokenType::OpenParens, "Missing open parentheses for if statement");
+        advance();
+
+        shared_ptr<Expression> condition = parseStatement();
+
+        expectCurrentTokenType(TokenType::CloseParens, "Missing closing parentheses after if statement.");
+        advance();
+
+        return condition;
     }
 
     shared_ptr<Expression> Parser::parseWhile()
     {
-        throw "Not implemented";
+        CONSISTENCY_CHECK(current().text() == "while", "parseWhile called without while keyword");
+        // skip while
+        advance();
+
+        shared_ptr<Expression> condition = parseIfWhileCondition();
+
+        shared_ptr<Block> block = parseBlock();
+
+        return shared_ptr<Expression>(new WhileNode(condition, block));
     }
 
     shared_ptr<Expression> Parser::parseIf()
     {
-        throw "Not implemented";
+        CONSISTENCY_CHECK(current().text() == "if", "parseIf called without if keyword");
+        // skip if
+        advance();
+
+        shared_ptr<Expression> condition = parseIfWhileCondition();
+
+        shared_ptr<Block> block = parseBlock();
+
+        vector<shared_ptr<ElseIfNode>> elseIfs;
+        while (current().type() == TokenType::Keyword && current().text() == "elif")
+        {
+            advance();
+
+            shared_ptr<Expression> elseIfCondition = parseIfWhileCondition();
+            shared_ptr<Block> elseIfBlock = parseBlock();
+
+            shared_ptr<ElseIfNode> elseIfNode = shared_ptr<ElseIfNode>(new ElseIfNode(elseIfCondition, elseIfBlock));
+            elseIfs.push_back(elseIfNode);
+        }
+
+        shared_ptr<Block> elseBlock;
+        if (current().type() == TokenType::Keyword && current().text() == "else")
+        {
+            advance();
+
+            elseBlock = parseBlock();
+        }
+
+        return shared_ptr<Expression>(new IfNode(condition, block, elseIfs, elseBlock));
     }
 
     shared_ptr<Expression> Parser::parseLet()

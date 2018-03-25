@@ -448,4 +448,101 @@ namespace ast
             (*it)->prettyPrint(out, indent);
         }
     }
+
+    ElseIfNode::ElseIfNode(shared_ptr<Expression> condition, shared_ptr<Block> block) :
+        mCondition(condition),
+        mBlock(block)
+    {
+
+    }
+
+    shared_ptr<Expression> ElseIfNode::getCondition()
+    {
+        return mCondition;
+    }
+
+    shared_ptr<Block> ElseIfNode::getBlock()
+    {
+        return mBlock;
+    }
+
+    ExpressionType ElseIfNode::getExpressionType()
+    {
+        return ExpressionType::ElseIf;
+    }
+
+    void ElseIfNode::prettyPrint(ostream &out, size_t indent)
+    {
+        throw "not implemented";
+    }
+
+    IfNode::IfNode(shared_ptr<Expression> condition, 
+                   shared_ptr<Block> ifBlock, 
+                   vector<shared_ptr<ElseIfNode>> elseIfs, 
+                   shared_ptr<Block> elseBlock) :
+        mCondition(condition),
+        mIfBlock(ifBlock),
+        mElseIfs(elseIfs),
+        mElseBlock(elseBlock)
+    {
+
+    }
+
+    shared_ptr<Expression> IfNode::getCondition()
+    {
+        return mCondition;
+    }
+
+    shared_ptr<Block> IfNode::getIfBlock()
+    {
+        return mIfBlock;
+    }
+
+    vector<shared_ptr<ElseIfNode>> IfNode::getElseIfs()
+    {
+        return mElseIfs;
+    }
+
+    shared_ptr<Block> IfNode::getElseBlock()
+    {
+        return mElseBlock;
+    }
+
+    ExpressionType IfNode::getExpressionType()
+    {
+        return ExpressionType::If;
+    }
+
+    void IfNode::prettyPrint(ostream &out, size_t indent)
+    {
+        throw "not implemented";
+    }
+
+    WhileNode::WhileNode(shared_ptr<Expression> condition, shared_ptr<Block> block) :
+        mCondition(condition),
+        mBlock(block)
+    {
+
+    }
+
+    shared_ptr<Expression> WhileNode::getCondition()
+    {
+        return mCondition;
+    }
+
+    shared_ptr<Block> WhileNode::getBlock()
+    {
+        return mBlock;
+    }
+
+    ExpressionType WhileNode::getExpressionType()
+    {
+        return ExpressionType::While;
+    }
+
+    void WhileNode::prettyPrint(ostream &out, size_t indent)
+    {
+        throw "not implemented";
+    }
+
 }

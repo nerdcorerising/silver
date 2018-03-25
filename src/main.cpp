@@ -10,6 +10,8 @@
 
 using namespace std;
 
+void waitForKey();
+
 struct ProgramOpts
 {
 public:
@@ -82,7 +84,7 @@ int main(int argc, char **argv)
     }
 
     CodeGen gen(node);
-    
+
     if (opt.genByteCode)
     {
         string out = "sampleoutput.bc";
@@ -94,13 +96,14 @@ int main(int argc, char **argv)
         cout << "running as JIT" << endl;
         gen.RunJit();
     }
-    else
-    {
-        // TODO: do the non-jit case
-    }
 
     gen.FreeResources();
     
-    waitForKey();
     return 0;
+}
+
+void waitForKey()
+{
+    std::cout << std::endl << "press any key to exit;";
+    std::cin.ignore(std::numeric_limits <std::streamsize> ::max(), '\n');
 }
