@@ -494,7 +494,7 @@ void CodeGen::Generate()
     llvm::verifyModule(*mModule);
 
     filebuf fb;
-    if (fb.open(mOutFile, ios::binary | ios::out))
+    if (mOutFile != "" && fb.open(mOutFile, ios::binary | ios::out))
     {
         ostream output(&fb);
         llvm::raw_os_ostream ls(output);

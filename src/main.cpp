@@ -14,12 +14,14 @@ struct ProgramOpts
 {
 public:
     inline ProgramOpts() :
-        runJit(false)
+        runJit(true),
+        genByteCode(false)
     {
 
     }
 
     bool runJit;
+    bool genByteCode;
 };
 
 typedef ProgramOpts Opts;
@@ -44,6 +46,10 @@ Opts getOpts(int argc, char **argv)
             if (realArg == "jit")
             {
                 opt.runJit = true;
+            }
+            else if (realArg == "bytecode")
+            {
+                opt.genByteCode = true;
             }
         }
     }
@@ -75,11 +81,15 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    string out = "sampleoutput.bc";
-    CodeGen gen(node, out);
-    gen.Generate();
+    CodeGen gen(node);
+    
+    if (opt.genByteCode)
+    {
+        string out = "sampleoutput.bc";
+        gen.Generate();
+    }
 
-    if (opt.runJit || true /* //TODO: don't want to mess with configs for now, remove */)
+    if (opt.runJit)
     {
         cout << "running as JIT" << endl;
         gen.RunJit();
