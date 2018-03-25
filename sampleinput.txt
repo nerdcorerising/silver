@@ -1,72 +1,19 @@
 
-int function ( )
-{
-    return 1;
+fn main() -> int {
+    let x: int;
+    let y = function(11);
+    x = function(-3);
+    let z = function(0);
+
+    return x + y + z;
 }
 
-int function2 (int a)
-{
-    return 2;
-}
-
-int function33(int a, int b, int cccc)
-{
-    350 % 70;
-    1 + 56;
-    int stuff;
-    stuff = 89;
-    return 33;
-}
-
-int function3(int a, int b, int cccc)
-{
-    int i = 500;
-    int a = (1 + 2) / 3;
-    return 3;
-}
-
-int function4 (int a, int b, int c, int d)
-{
-    return 4;
-}
-
-int function5 (int e, int d, int c, int b, int a)
-{
-    return 5;
-}
-
-
-int function6 (int a, int b, int c, int d,int e, int f)
-{
-    return 6;
-}
-
-int function7 ()
-{
-    ;
-    return 7;
-}
-
-int function8(int a)
-{
-    int abc = 3 * 5 + a * 2;
-    return 8;
-}
-
-int function88(int a, int b)
-{
-    return a * b;
-}
-
-int function9(int a)
-{
-    int b = a;
-    return b;
-}
-
-int main()
-{
-    int b = 5;
-    int a = function88(b, 8 * 3);
-    return (int)(a * 2.237);
+fn function(a: int) -> int {
+    if (a > 10) {
+        return 5;
+    } elif (a < -2) {
+        return 1;
+    } else {
+        return -3;
+    }
 }

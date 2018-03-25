@@ -155,8 +155,18 @@ namespace ast
 
     DeclarationNode::DeclarationNode(string type, string name) :
         mType(type),
-        mName(name)
+        mName(name),
+        mExpression(nullptr)
     {
+    }
+
+
+    DeclarationNode::DeclarationNode(shared_ptr<Expression> expression, std::string name) :
+        mType(),
+        mName(name),
+        mExpression(expression)
+    {
+
     }
 
     ExpressionType DeclarationNode::getExpressionType()
@@ -172,6 +182,11 @@ namespace ast
     string DeclarationNode::getTypeName()
     {
         return mType;
+    }
+
+    shared_ptr<Expression> DeclarationNode::getExpression()
+    {
+        return mExpression;
     }
 
     void DeclarationNode::prettyPrint(ostream &out, size_t indent)

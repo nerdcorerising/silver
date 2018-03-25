@@ -26,6 +26,7 @@ namespace tok
         CloseParens,
         Comma,
         SemiColon,
+        Colon,
         Error
     } TokenType;
 

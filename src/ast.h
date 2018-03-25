@@ -106,12 +106,15 @@ namespace ast
     private:
         std::string mType;
         std::string mName;
+        std::shared_ptr<Expression> mExpression;
 
     public:
         DeclarationNode(std::string type, std::string name);
+        DeclarationNode(std::shared_ptr<Expression> expression, std::string name);
         virtual ExpressionType getExpressionType() override;
         std::string getName();
         std::string getTypeName();
+        std::shared_ptr<Expression> getExpression();
         virtual void prettyPrint(std::ostream &out, size_t indent = 0) override;
     };
 

@@ -46,11 +46,13 @@ namespace parse
         tok::Token lookAhead;
         std::string mName;
 
-        std::vector<std::shared_ptr<ast::Argument>> parseArguments();
+        std::vector<std::shared_ptr<ast::Argument>> parseArgumentsForDeclaration();
         std::shared_ptr<ast::Function> parseFunction();
         std::shared_ptr<ast::Block> parseBlock();
 
         std::shared_ptr<ast::Expression> parseWhile();
+        std::shared_ptr<ast::Expression> parseIf();
+        std::shared_ptr<ast::Expression> parseLet();
         std::shared_ptr<ast::Expression> parseStatementHelper(std::shared_ptr<ast::Expression> curr, int minPrecedence);
         std::shared_ptr<ast::Expression> parseStatement();
         std::vector<std::shared_ptr<ast::Expression>> parseFunctionArgs();

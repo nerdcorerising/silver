@@ -12,9 +12,9 @@ using namespace std;
 namespace tok
 {
     Tokenizer::Tokenizer(void) :
-        mOperators({ "+", "++", "-", "--", "*", "/", "%", "=", "<", ">", "==", ">=", "<=" }),
-        mKeywords({ "if", "else", "for", "while", "module", "return" }),
-        mSpecialtokens({ '[', ']', '{', '}', '(', ')' }),
+        mOperators({ "+", "++", "-", "--", "*", "/", "%", "=", "<", ">", "==", ">=", "<=", "->" }),
+        mKeywords({ "if", "elif", "else", "for", "while", "module", "return", "fn", "let" }),
+        mSpecialtokens({ '[', ']', '{', '}', '(', ')', ',', ';', ':' }),
         mBuffer(),
         mState(BufferState::EmptyState),
         mReady(false),
@@ -258,16 +258,7 @@ namespace tok
 
     bool Tokenizer::isKeyword(string str)
     {
-        unsigned int i = 0;
-        for (i = 0; i < mKeywords.size(); ++i)
-        {
-            if (mKeywords[i] == str)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return std::find(mKeywords.begin(), mKeywords.end(), str) != mKeywords.end();
     }
 
     TokenType Tokenizer::specialTokenKind(string text)
@@ -292,6 +283,8 @@ namespace tok
             return TokenType::Comma;
         case ';':
             return TokenType::SemiColon;
+        case ':':
+            return TokenType::Colon;
         default:
             ASSERT(false);
         }
@@ -376,34 +369,12 @@ namespace tok
 
     bool Tokenizer::isOperator(string chp)
     {
-        unsigned int i = 0;
-        for (i = 0; i < mOperators.size(); ++i)
-        {
-            if (mOperators[i] == chp)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return std::find(mOperators.begin(), mOperators.end(), chp) != mOperators.end();
     }
 
     bool Tokenizer::isSpecialToken(char ch)
     {
-        switch (ch)
-        {
-        case '[':
-        case ']':
-        case '{':
-        case '}':
-        case '(':
-        case ')':
-        case ',':
-        case ';':
-            return true;
-        default:
-            return false;
-        }
+        return std::find(mSpecialtokens.begin(), mSpecialtokens.end(), ch) != mSpecialtokens.end();
     }
 
     BufferState Tokenizer::bufferType(char ch)

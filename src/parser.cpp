@@ -135,7 +135,7 @@ namespace parse
 
     }
 
-    vector<shared_ptr<Argument>> Parser::parseArguments()
+    vector<shared_ptr<Argument>> Parser::parseArgumentsForDeclaration()
     {
         if (mTokens.current().type() != TokenType::OpenParens)
         {
@@ -155,18 +155,26 @@ namespace parse
         {
             if (mTokens.current().type() != TokenType::Identifier)
             {
-                PARSE_ERROR("Invalid type for function argument.");
-            }
-
-            string type = mTokens.current().text();
-            mTokens.advance();
-
-            if (mTokens.current().type() != TokenType::Identifier)
-            {
-                PARSE_ERROR("invalid identifier for function argument.");
+                PARSE_ERROR("Invalid name for function argument.");
             }
 
             string name = mTokens.current().text();
+            mTokens.advance();
+
+            if (mTokens.current().type() != TokenType::Colon)
+            {
+                PARSE_ERROR("Expected colon after function argument.");
+            }
+
+            mTokens.advance();
+
+
+            if (mTokens.current().type() != TokenType::Identifier)
+            {
+                PARSE_ERROR("Type for function argument.");
+            }
+
+            string type = mTokens.current().text();
             mTokens.advance();
 
             args.push_back(shared_ptr<Argument>(new Argument(type, name)));
@@ -196,12 +204,11 @@ namespace parse
 
     shared_ptr<Function> Parser::parseFunction()
     {
-        if (mTokens.current().type() != TokenType::Identifier)
+        if (mTokens.current().type() != TokenType::Keyword || mTokens.current().text() != "fn")
         {
-            PARSE_ERROR("Invalid type declaration for function.");
+            PARSE_ERROR("Missing function keyword");
         }
 
-        string returnType = mTokens.current().text();
         mTokens.advance();
 
         if (mTokens.current().type() != TokenType::Identifier)
@@ -212,7 +219,22 @@ namespace parse
         string name = mTokens.current().text();
         mTokens.advance();
 
-        vector<shared_ptr<Argument>> args = parseArguments();
+        vector<shared_ptr<Argument>> args = parseArgumentsForDeclaration();
+
+        string returnType;
+        if (mTokens.current().type() == TokenType::Operator && mTokens.current().text() == "->")
+        {
+            mTokens.advance();
+
+            if (mTokens.current().type() != TokenType::Identifier)
+            {
+                PARSE_ERROR("Invalid return type");
+            }
+
+            // TODO: if multiple return types are wanted, need to implement here
+            returnType = mTokens.current().text();
+            mTokens.advance();
+        }
 
         shared_ptr<Block> block = parseBlock();
 
@@ -331,13 +353,7 @@ namespace parse
             break;
         case TokenType::Identifier:
         {
-            if (mTokens.lookAhead().type() == TokenType::Identifier)
-            {
-                node = shared_ptr<Expression>(new DeclarationNode(mTokens.current().text(), mTokens.lookAhead().text()));
-                mTokens.advance();
-                mTokens.advance();
-            }
-            else if (mTokens.lookAhead().type() == TokenType::OpenParens)
+            if (mTokens.lookAhead().type() == TokenType::OpenParens)
             {
                 string name = mTokens.current().text();
                 mTokens.advance();
@@ -386,7 +402,7 @@ namespace parse
         }
         else
         {
-            INTERNAL_ERROR("Unrecognized operator in parser.");
+            PARSE_ERROR("Unrecognized operator in parser.");
         }
     }
 
@@ -445,11 +461,6 @@ namespace parse
         return exp;
     }
 
-    shared_ptr<Expression> Parser::parseWhile()
-    {
-        throw "Not implemented";
-    }
-
     shared_ptr<Expression> Parser::parseExpression()
     {
         Token curr = mTokens.current();
@@ -467,6 +478,14 @@ namespace parse
 
                 return shared_ptr<Expression>(new ReturnNode(ret));
             }
+            else if (curr.text() == "let")
+            {
+                return parseLet();
+            }
+            else if (curr.text() == "if")
+            {
+                return parseIf();
+            }
             else
             {
                 INTERNAL_ERROR("Unhandled keyword in parser.");
@@ -475,6 +494,57 @@ namespace parse
         else
         {
             return parseStatement();
+        }
+    }
+
+    shared_ptr<Expression> Parser::parseWhile()
+    {
+        throw "Not implemented";
+    }
+
+    shared_ptr<Expression> Parser::parseIf()
+    {
+        throw "Not implemented";
+    }
+
+    shared_ptr<Expression> Parser::parseLet()
+    {
+        // skip let keyword
+        mTokens.advance();
+
+        if (mTokens.current().type() != TokenType::Identifier)
+        {
+            PARSE_ERROR("Invalid identifier name");
+        }
+
+        string name = mTokens.current().text();
+        mTokens.advance();
+
+        if (mTokens.current().type() == TokenType::Colon)
+        {
+            mTokens.advance();
+
+            if (mTokens.current().type() != TokenType::Identifier)
+            {
+                // Do case where it's just the type
+                PARSE_ERROR("Expected type in declaration.");
+            }
+
+            string type = mTokens.current().text();
+            mTokens.advance();
+
+            return shared_ptr<Expression>(new DeclarationNode(type, name));
+        }
+        else if (mTokens.current().type() == TokenType::Operator && mTokens.current().text() == "=")
+        {
+            mTokens.advance();
+            shared_ptr<Expression> expression = parseStatement();
+
+            return shared_ptr<Expression>(new DeclarationNode(expression, name));
+        }
+        else
+        {
+            PARSE_ERROR("Expected : or = after let");
         }
     }
 
