@@ -12,7 +12,7 @@
 
 #define UNREFERENCED(X) (void)(X)
 
-#define INTERNAL_ERROR(X) cout << X; throw "Error handling not implemented"
+#define CONSISTENCY_CHECK(COND, X) do { if (!(COND)) { cout << X; throw "Error handling not implemented"; } } while (false)
 
 inline void waitForKey()
 {

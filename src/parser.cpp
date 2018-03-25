@@ -10,124 +10,6 @@ using namespace ast;
 
 namespace parse
 {
-    TokenManager::TokenManager(Tokenizer tok, istream &in) :
-        mTokenizer(tok),
-        mInput(in),
-        mCurrent(),
-        mLookAheads(),
-        mGood(true)
-    {
-        advance();
-    }
-
-    bool TokenManager::hasInput()
-    {
-        return mInput.good();
-    }
-
-    Token TokenManager::getNextToken()
-    {
-        while (!mTokenizer.ready())
-        {
-            int rawCh = mInput.get();
-            if (!mInput.good())
-            {
-                break;
-            }
-
-            char ch = (char)rawCh;
-            mTokenizer.insert(ch);
-        }
-
-        Token tok;
-        if (!mTokenizer.ready())
-        {
-            tok = mTokenizer.flush();
-        }
-        else
-        {
-            tok = mTokenizer.dispense();
-        }
-
-        return tok;
-    }
-
-    Token TokenManager::getNextNonWhitespaceToken()
-    {
-        Token tok = getNextToken();
-        while (tok.type() == TokenType::WhiteSpace || tok.type() == TokenType::Comment)
-        {
-            tok = getNextToken();
-        }
-
-        return tok;
-    }
-
-    void TokenManager::preloadLookAheads(size_t count)
-    {
-        while (mLookAheads.size() < count)
-        {
-            Token tok = getNextNonWhitespaceToken();
-            mLookAheads.push_back(tok);
-        }
-    }
-
-    void TokenManager::advance()
-    {
-        if (!hasInput())
-        {
-            mGood = false;
-            return;
-        }
-
-        if (mLookAheads.size() > 0)
-        {
-            mCurrent = mLookAheads.front();
-            mLookAheads.pop_front();
-        }
-        else
-        {
-            mCurrent = getNextNonWhitespaceToken();
-        }
-    }
-
-    void TokenManager::advanceBy(size_t count)
-    {
-        preloadLookAheads(count);
-
-        for (size_t i = 0; i < count; ++i)
-        {
-            advance();
-        }
-    }
-
-    Token TokenManager::current()
-    {
-        if (mGood)
-        {
-            return mCurrent;
-        }
-
-        PARSE_ERROR("Unexpected end of input.");
-    }
-
-    Token TokenManager::lookAhead()
-    {
-        return lookAheadBy(0);
-    }
-
-    Token TokenManager::lookAheadBy(size_t pos)
-    {
-        size_t sz = pos + 1;
-
-        if (mLookAheads.size() < sz)
-        {
-            preloadLookAheads(sz);
-        }
-
-        return mLookAheads[pos];
-    }
-
     Parser::Parser(string name, Tokenizer tok, istream &in) :
         mName(name),
         mTokens(tok, in)
@@ -137,103 +19,76 @@ namespace parse
 
     vector<shared_ptr<Argument>> Parser::parseArgumentsForDeclaration()
     {
-        if (mTokens.current().type() != TokenType::OpenParens)
-        {
-            PARSE_ERROR("Unexpected token after function name");
-        }
+        expectCurrentTokenType(TokenType::OpenParens, "Unexpected token after function name");
 
-        mTokens.advance();
+        advance();
 
         vector<shared_ptr<Argument>> args;
-        if (mTokens.current().type() == TokenType::CloseParens)
+        if (current().type() == TokenType::CloseParens)
         {
-            mTokens.advance();
+            advance();
             return args;
         }
 
         for (;;)
         {
-            if (mTokens.current().type() != TokenType::Identifier)
-            {
-                PARSE_ERROR("Invalid name for function argument.");
-            }
+            expectCurrentTokenType(TokenType::Identifier, "Invalid name for function argument.");
 
-            string name = mTokens.current().text();
-            mTokens.advance();
+            string name = current().text();
+            advance();
 
-            if (mTokens.current().type() != TokenType::Colon)
-            {
-                PARSE_ERROR("Expected colon after function argument.");
-            }
+            expectCurrentTokenType(TokenType::Colon, "Expected colon after function argument.");
 
-            mTokens.advance();
+            advance();
 
+            expectCurrentTokenType(TokenType::Identifier, "Type for function argument.");
 
-            if (mTokens.current().type() != TokenType::Identifier)
-            {
-                PARSE_ERROR("Type for function argument.");
-            }
-
-            string type = mTokens.current().text();
-            mTokens.advance();
+            string type = current().text();
+            advance();
 
             args.push_back(shared_ptr<Argument>(new Argument(type, name)));
 
-            TokenType curType = mTokens.current().type();
+            TokenType curType = current().type();
             if (curType == TokenType::CloseParens)
             {
                 break;
             }
-            else if (curType != TokenType::Comma)
-            {
-                PARSE_ERROR("Expected comma or close of parentheses in argument list");
-            }
+
+            expectCurrentTokenType(TokenType::Comma, "Expected comma or close of parentheses in argument list");
 
             // Skip comma
-            mTokens.advance();
+            advance();
         }
 
-        if (mTokens.current().type() != TokenType::CloseParens)
-        {
-            PARSE_ERROR("Expected closing parentheses.");
-        }
+        expectCurrentTokenType(TokenType::CloseParens, "Expected closing parentheses.");
 
-        mTokens.advance();
+        advance();
         return args;
     }
 
     shared_ptr<Function> Parser::parseFunction()
     {
-        if (mTokens.current().type() != TokenType::Keyword || mTokens.current().text() != "fn")
-        {
-            PARSE_ERROR("Missing function keyword");
-        }
+        expectCurrentTokenTypeAndText(TokenType::Keyword, "fn", "Missing function keyword");
 
-        mTokens.advance();
+        advance();
 
-        if (mTokens.current().type() != TokenType::Identifier)
-        {
-            PARSE_ERROR("Invalid function name.");
-        }
+        expectCurrentTokenType(TokenType::Identifier, "Invalid function name.");
 
-        string name = mTokens.current().text();
-        mTokens.advance();
+        string name = current().text();
+        advance();
 
         vector<shared_ptr<Argument>> args = parseArgumentsForDeclaration();
 
         string returnType;
-        if (mTokens.current().type() == TokenType::Operator && mTokens.current().text() == "->")
+        if (current().type() == TokenType::Operator && current().text() == "->")
         {
-            mTokens.advance();
+            advance();
 
-            if (mTokens.current().type() != TokenType::Identifier)
-            {
-                PARSE_ERROR("Invalid return type");
-            }
+            expectCurrentTokenType(TokenType::Identifier, "Invalid return type");
 
             // TODO: if multiple return types are wanted, need to implement here
-            returnType = mTokens.current().text();
-            mTokens.advance();
+            returnType = current().text();
+            advance();
         }
 
         shared_ptr<Block> block = parseBlock();
@@ -243,59 +98,50 @@ namespace parse
 
     shared_ptr<Block> Parser::parseBlock()
     {
-        if (mTokens.current().type() != TokenType::LeftBrace)
-        {
-            PARSE_ERROR("Expected curly brace to open block");
-        }
+        expectCurrentTokenType(TokenType::LeftBrace, "Expected curly brace to open block");
 
-        mTokens.advance();
+        advance();
         vector<shared_ptr<Expression>> expressions;
 
-        while (mTokens.current().type() != TokenType::RightBrace)
+        while (current().type() != TokenType::RightBrace)
         {
             shared_ptr<Expression> exp = parseExpression();
             expressions.push_back(exp);
         }
 
-        mTokens.advance();
+        advance();
         return shared_ptr<Block>(new Block(expressions));
     }
 
     vector<shared_ptr<Expression>> Parser::parseFunctionArgs()
     {
-        if (mTokens.current().type() != TokenType::OpenParens)
-        {
-            PARSE_ERROR("Expected open parens to open argument list");
-        }
+        expectCurrentTokenType(TokenType::OpenParens, "Expected open parens to open argument list");
 
-        mTokens.advance();
+        advance();
 
         vector<shared_ptr<Expression>> args;
         for (;;)
         {
             shared_ptr<Expression> arg = makeNode();
-            if (mTokens.current().type() != TokenType::Comma && mTokens.current().type() != TokenType::CloseParens)
+            if (current().type() != TokenType::Comma && current().type() != TokenType::CloseParens)
             {
                 arg = parseStatementHelper(arg, 0);
             }
 
             args.push_back(arg);
 
-            if (mTokens.current().type() == TokenType::CloseParens)
+            if (current().type() == TokenType::CloseParens)
             {
                 break;
             }
 
-            ASSERT(mTokens.current().type() == TokenType::Comma);
-            mTokens.advance();
+            ASSERT(current().type() == TokenType::Comma);
+            advance();
         }
 
-        if (mTokens.current().type() != TokenType::CloseParens)
-        {
-            PARSE_ERROR("Expected close parens to close argument list");
-        }
+        expectCurrentTokenType(TokenType::CloseParens, "Expected close parens to close argument list");
 
-        mTokens.advance();
+        advance();
         return args;
     }
 
@@ -305,23 +151,23 @@ namespace parse
         double dVal;
         int iVal;
 
-        switch (mTokens.current().type())
+        switch (current().type())
         {
         case TokenType::IntLiteral:
         {
-            iVal = stoi(mTokens.current().text());
+            iVal = stoi(current().text());
             node = shared_ptr<Expression>(new IntegerLiteralNode(iVal));
-            mTokens.advance();
+            advance();
         }
             break;
         case TokenType::OpenParens:
         {
-            mTokens.advance();
+            advance();
 
-            if (mTokens.current().type() == TokenType::Identifier 
-                && mTokens.lookAhead().type() == TokenType::CloseParens)
+            if (current().type() == TokenType::Identifier 
+                && lookAhead().type() == TokenType::CloseParens)
             {
-                string type = mTokens.current().text();
+                string type = current().text();
                 mTokens.advanceBy(2);
                 shared_ptr<Expression> exp = makeNode();
                 node = shared_ptr<Expression>(new CastNode(type, exp));
@@ -329,47 +175,44 @@ namespace parse
             else
             {
                 node = parseStatementHelper(makeNode(), 0);
-                if (mTokens.current().type() != TokenType::CloseParens)
-                {
-                    PARSE_ERROR("Expected closing parens.");
-                }
+                expectCurrentTokenType(TokenType::CloseParens, "Expected closing parens.");
 
-                mTokens.advance();
+                advance();
             }
         }
             break;
         case TokenType::StringLiteral:
         {
-            node = shared_ptr<Expression>(new StringLiteralNode(mTokens.current().text()));
-            mTokens.advance();
+            node = shared_ptr<Expression>(new StringLiteralNode(current().text()));
+            advance();
         }
             break;
         case TokenType::FloatLiteral:
         {
-            dVal = stod(mTokens.current().text());
+            dVal = stod(current().text());
             node = shared_ptr<Expression>(new FloatLiteralNode(dVal));
-            mTokens.advance();
+            advance();
         }
             break;
         case TokenType::Identifier:
         {
-            if (mTokens.lookAhead().type() == TokenType::OpenParens)
+            if (lookAhead().type() == TokenType::OpenParens)
             {
-                string name = mTokens.current().text();
-                mTokens.advance();
+                string name = current().text();
+                advance();
                 vector<shared_ptr<Expression>> args = parseFunctionArgs();
                 node = shared_ptr<Expression>(new FunctionCallNode(name, args));
             }
             else
             {
-                node = shared_ptr<Expression>(new IdentifierNode(mTokens.current().text()));
-                mTokens.advance();
+                node = shared_ptr<Expression>(new IdentifierNode(current().text()));
+                advance();
             }
         }
             break;
         default:
         {
-            INTERNAL_ERROR("Unknown token type in Parser::makeNode");
+            CONSISTENCY_CHECK(false, "Unknown token type in Parser::makeNode");
         }
         }
 
@@ -402,27 +245,24 @@ namespace parse
         }
         else
         {
-            PARSE_ERROR("Unrecognized operator in parser.");
+            CONSISTENCY_CHECK(false, "Unrecognized operator in parser.");
         }
     }
 
     shared_ptr<Expression> Parser::parseStatementHelper(shared_ptr<Expression> curr, int minPrecedence)
     {
         //TODO: figure out unary operators (increment, decrement, function call, etc.)
-        if (mTokens.current().type() != TokenType::Operator)
-        {
-            PARSE_ERROR("Expected operator in expression.");
-        }
+        expectCurrentTokenType(TokenType::Operator, "Expected operator in expression.");
 
-        while (mTokens.current().type() == TokenType::Operator && operatorPrecedence(mTokens.current()) >= minPrecedence)
+        while (current().type() == TokenType::Operator && operatorPrecedence(current()) >= minPrecedence)
         {
-            Token op = mTokens.current();
-            mTokens.advance();
+            Token op = current();
+            advance();
             shared_ptr<Expression> next = makeNode();
 
-            while (mTokens.current().type() == TokenType::Operator && operatorPrecedence(mTokens.current()) > operatorPrecedence(op))
+            while (current().type() == TokenType::Operator && operatorPrecedence(current()) > operatorPrecedence(op))
             {
-                next = parseStatementHelper(next, operatorPrecedence(mTokens.current()));
+                next = parseStatementHelper(next, operatorPrecedence(current()));
             }
 
             curr = shared_ptr<Expression>(new BinaryExpressionNode(curr, next, op.text()));
@@ -433,17 +273,17 @@ namespace parse
 
     shared_ptr<Expression> Parser::parseStatement()
     {
-        Token curr = mTokens.current();
+        Token curr = current();
 
         if (curr.type() == TokenType::SemiColon)
         {
-            mTokens.advance();
+            advance();
             return shared_ptr<Expression>(new EmptyStatementNode());
         }
 
         shared_ptr<Expression> node = makeNode();
         shared_ptr<Expression> exp;
-        if (mTokens.current().type() != TokenType::SemiColon)
+        if (current().type() != TokenType::SemiColon)
         {
             exp = parseStatementHelper(node, 0);
         }
@@ -452,18 +292,15 @@ namespace parse
             exp = node;
         }
 
-        if (mTokens.current().type() != TokenType::SemiColon)
-        {
-            PARSE_ERROR("Expected semicolon after statement.");
-        }
+        expectCurrentTokenType(TokenType::SemiColon, "Expected semicolon after statement.");
 
-        mTokens.advance();
+        advance();
         return exp;
     }
 
     shared_ptr<Expression> Parser::parseExpression()
     {
-        Token curr = mTokens.current();
+        Token curr = current();
 
         if (curr.type() == TokenType::Keyword)
         {
@@ -473,7 +310,7 @@ namespace parse
             }
             else if (curr.text() == "return")
             {
-                mTokens.advance();
+                advance();
                 shared_ptr<Expression> ret = parseStatement();
 
                 return shared_ptr<Expression>(new ReturnNode(ret));
@@ -488,7 +325,7 @@ namespace parse
             }
             else
             {
-                INTERNAL_ERROR("Unhandled keyword in parser.");
+                CONSISTENCY_CHECK(false, "Unhandled keyword in parser.");
             }
         }
         else
@@ -509,35 +346,30 @@ namespace parse
 
     shared_ptr<Expression> Parser::parseLet()
     {
+        CONSISTENCY_CHECK(current().text() == "let", "parseLet called without let keyword");
+
         // skip let keyword
-        mTokens.advance();
+        advance();
 
-        if (mTokens.current().type() != TokenType::Identifier)
+        expectCurrentTokenType(TokenType::Identifier, "Invalid identifier name");
+
+        string name = current().text();
+        advance();
+
+        if (current().type() == TokenType::Colon)
         {
-            PARSE_ERROR("Invalid identifier name");
-        }
+            advance();
 
-        string name = mTokens.current().text();
-        mTokens.advance();
+            expectCurrentTokenType(TokenType::Identifier, "Expected type in declaration.");
 
-        if (mTokens.current().type() == TokenType::Colon)
-        {
-            mTokens.advance();
-
-            if (mTokens.current().type() != TokenType::Identifier)
-            {
-                // Do case where it's just the type
-                PARSE_ERROR("Expected type in declaration.");
-            }
-
-            string type = mTokens.current().text();
-            mTokens.advance();
+            string type = current().text();
+            advance();
 
             return shared_ptr<Expression>(new DeclarationNode(type, name));
         }
-        else if (mTokens.current().type() == TokenType::Operator && mTokens.current().text() == "=")
+        else if (current().type() == TokenType::Operator && current().text() == "=")
         {
-            mTokens.advance();
+            advance();
             shared_ptr<Expression> expression = parseStatement();
 
             return shared_ptr<Expression>(new DeclarationNode(expression, name));
@@ -559,5 +391,81 @@ namespace parse
         }
 
         return shared_ptr<Assembly>(new Assembly(mName, functions));
+    }
+
+    void Parser::expectCurrentTokenType(TokenType type, string message)
+    {
+        expectTokenType(current(), type, message);
+    }
+    
+    void Parser::expectCurrentTokenText(string text, string message)
+    {
+        expectTokenText(current(), text, message);
+    }
+    
+    void Parser::expectCurrentTokenTypeAndText(TokenType type, string text, string message)
+    {
+        expectCurrentTokenType(type, message);
+        expectCurrentTokenText(text, message);
+    }
+
+    void Parser::expectTokenType(Token token, TokenType type, string message)
+    {
+        if (token.type() != type)
+        {
+            PARSE_ERROR(message);
+        }
+    }
+    
+    void Parser::expectTokenText(Token token, string text, string message)
+    {
+        if (token.text() != text)
+        {
+            PARSE_ERROR(message);
+        }
+    }
+    
+    void Parser::expectTokenTypeAndText(Token token, TokenType type, string text, string message)
+    {
+        expectTokenType(token, type, message);
+        expectTokenText(token, text, message);
+    }
+
+    void Parser::advance()
+    {
+        mTokens.advance();
+    }
+
+    Token Parser::current()
+    {
+        Token token;
+        if (!mTokens.tryGetCurrent(token))
+        {
+            PARSE_ERROR("Unexpected end of input");
+        }
+
+        return token;
+    }
+
+    Token Parser::lookAhead()
+    {
+        Token token;
+        if (!mTokens.tryGetLookAhead(token))
+        {
+            PARSE_ERROR("Unexpected end of input");
+        }
+
+        return token;
+    }
+
+    Token Parser::lookAheadBy(size_t pos)
+    {
+        Token token;
+        if (!mTokens.tryGetLookAheadBy(pos, token))
+        {
+            PARSE_ERROR("Unexpected end of input");
+        }
+
+        return token;
     }
 }

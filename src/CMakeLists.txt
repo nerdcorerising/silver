@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.1)
 
 project(silver)
 
-set(SOURCES main.cpp ast.cpp codegen.cpp parser.cpp tokenizer.cpp)
+set(SOURCES main.cpp ast.cpp codegen.cpp parser.cpp tokenizer.cpp tokenmanager.cpp)
 
 add_executable(silver ${SOURCES})
 

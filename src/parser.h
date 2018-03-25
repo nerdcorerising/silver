@@ -2,48 +2,22 @@
 #pragma once
 
 
-#include <iostream>
 #include <memory>
-#include <deque>
 
 #include "common.h"
 #include "tokenizer.h"
+#include "tokenmanager.h"
 #include "ast.h"
 
 #define PARSE_ERROR(MSG) std::cout << MSG; throw "parse error" //; waitForKey(); exit(-1)
 
 namespace parse
 {
-
-    class TokenManager
-    {
-    private:
-        tok::Tokenizer mTokenizer;
-        std::istream &mInput;
-        bool mGood;
-        tok::Token mCurrent;
-        std::deque<tok::Token> mLookAheads;
-
-        tok::Token getNextToken();
-        tok::Token getNextNonWhitespaceToken();
-        void preloadLookAheads(size_t count);
-
-    public:
-        TokenManager(tok::Tokenizer tok, std::istream &in);
-
-        void advance();
-        void advanceBy(size_t count);
-        tok::Token current();
-        tok::Token lookAhead();
-        tok::Token lookAheadBy(size_t pos);
-        bool hasInput();
-    };
-
     class Parser
     {
     private:
         TokenManager mTokens;
-        tok::Token lookAhead;
+
         std::string mName;
 
         std::vector<std::shared_ptr<ast::Argument>> parseArgumentsForDeclaration();
@@ -60,7 +34,20 @@ namespace parse
 
         std::shared_ptr<ast::Expression> makeNode();
 
+        void expectCurrentTokenType(tok::TokenType type, std::string message);
+        void expectCurrentTokenText(std::string text, std::string message);
+        void expectCurrentTokenTypeAndText(tok::TokenType type, std::string text, std::string message);
+
+        void expectTokenType(tok::Token token, tok::TokenType type, std::string message);
+        void expectTokenText(tok::Token token, std::string text, std::string message);
+        void expectTokenTypeAndText(tok::Token token, tok::TokenType type, std::string text, std::string message);
+
         int operatorPrecedence(tok::Token op);
+
+        void advance();
+        tok::Token current();
+        tok::Token lookAhead();
+        tok::Token lookAheadBy(size_t pos);
     public:
         Parser(std::string, tok::Tokenizer tok, std::istream &in);
 

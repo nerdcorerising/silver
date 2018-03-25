@@ -63,6 +63,11 @@ namespace tok
         {
         }
 
+        Token(const Token& other) = default;
+        Token(Token&& other) = default;
+        Token& operator=(const Token& other) = default;
+        Token& operator=(Token&& other) = default;
+
         inline TokenType type()
         {
             return mType;
