@@ -32,7 +32,7 @@
 #include "llvm/Support/ManagedStatic.h"
 #pragma warning (pop)
 
-#include "parser.h"
+#include "parser/parser.h"
 
 namespace codegen
 {

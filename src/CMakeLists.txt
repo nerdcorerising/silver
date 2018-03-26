@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.1)
 
 project(silver)
 
-set(SOURCES main.cpp ast.cpp codegen.cpp parser.cpp tokenizer.cpp tokenmanager.cpp optimizationpass.cpp)
+include_directories(".")
+
+set(SOURCES main.cpp ast/ast.cpp codegen/codegen.cpp parser/parser.cpp parser/tokenizer.cpp parser/tokenmanager.cpp passes/optimizationpass.cpp passes/hoistdeclarationpass.cpp)
 
 add_executable(silver ${SOURCES})
 

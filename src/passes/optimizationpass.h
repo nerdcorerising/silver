@@ -5,7 +5,7 @@
 #include <string>
 
 #include "common.h"
-#include "ast.h"
+#include "ast/ast.h"
 
 namespace optimization
 {
@@ -38,17 +38,5 @@ namespace optimization
         OptimizationPassManager(BuildType type);
 
         void performPasses(std::shared_ptr<ast::Assembly> assembly);
-    };
-
-    class HoistDeclarationPass : public Pass
-    {
-    private:
-        void performPassOnBlock(std::shared_ptr<ast::BlockNode> block);
-
-    public:
-        HoistDeclarationPass() = default;
-        virtual ~HoistDeclarationPass() = default;
-
-        virtual void performPass(std::shared_ptr<ast::Assembly> assembly) override;
     };
 }

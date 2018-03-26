@@ -4,10 +4,10 @@
 #include <algorithm>
 #include <string>
 
-#include "tokenizer.h"
-#include "parser.h"
-#include "optimizationpass.h"
-#include "codegen.h"
+#include "parser/tokenizer.h"
+#include "parser/parser.h"
+#include "passes/optimizationpass.h"
+#include "codegen/codegen.h"
 
 using namespace std;
 using namespace optimization;
