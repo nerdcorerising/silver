@@ -34,54 +34,57 @@
 
 #include "parser.h"
 
-class SymbolTable
+namespace codegen
 {
-private:
-    std::vector<std::map<std::string, llvm::AllocaInst *>> mStack;
-    std::map<std::string, llvm::AllocaInst *> mCurrent;
+    class SymbolTable
+    {
+    private:
+        std::vector<std::map<std::string, llvm::AllocaInst *>> mStack;
+        std::map<std::string, llvm::AllocaInst *> mCurrent;
 
-    std::map<std::string, llvm::Function *> mFunctions;
+        std::map<std::string, llvm::Function *> mFunctions;
 
-public:
-    SymbolTable();
-    void putVar(std::string name, llvm::AllocaInst *inst);
-    llvm::AllocaInst *getVar(std::string name);
+    public:
+        SymbolTable();
+        void putVar(std::string name, llvm::AllocaInst *inst);
+        llvm::AllocaInst *getVar(std::string name);
 
-    void putFunc(std::string name, llvm::Function *func);
-    llvm::Function *getFunc(std::string name);
+        void putFunc(std::string name, llvm::Function *func);
+        llvm::Function *getFunc(std::string name);
 
-    void enterContext();
-    void leaveContext();
-};
+        void enterContext();
+        void leaveContext();
+    };
 
-class CodeGen
-{
-private:
-    std::string mOutFile;
-    std::shared_ptr<ast::Assembly> mTree;
-    SymbolTable mTable;
+    class CodeGen
+    {
+    private:
+        std::string mOutFile;
+        std::shared_ptr<ast::Assembly> mTree;
+        SymbolTable mTable;
 
-    llvm::LLVMContext mContext;
-    llvm::Module *mModule;
-    llvm::Function *mMain;
-    llvm::IRBuilder<> mBuilder;
-    llvm::legacy::FunctionPassManager *mFpm;
+        llvm::LLVMContext mContext;
+        llvm::Module *mModule;
+        llvm::Function *mMain;
+        llvm::IRBuilder<> mBuilder;
+        llvm::legacy::FunctionPassManager *mFpm;
 
-    llvm::Type *stringToType(std::string str);
-    std::vector<llvm::Type *> getFunctionArgumentTypes(std::shared_ptr<ast::Function> function);
+        llvm::Type *stringToType(std::string str);
+        std::vector<llvm::Type *> getFunctionArgumentTypes(std::shared_ptr<ast::Function> function);
 
-    void GenerateAssembly(std::shared_ptr<ast::Assembly> assembly);
-    llvm::Value *GenerateFunction(std::shared_ptr<ast::Function> function);
-    llvm::Value *GenerateExpression(std::shared_ptr<ast::Expression> expression);
-    llvm::Value *GenerateBinaryExpression(std::shared_ptr<ast::BinaryExpressionNode> expression);
-    llvm::Value *GenerateIntegerMath(std::string op, llvm::Value *lhs, llvm::Value *rhs);
-    llvm::Value *GenerateFloatingPointMath(std::string op, llvm::Value *lhs, llvm::Value *rhs);
-    llvm::Value *GenerateFunctionCall(std::shared_ptr<ast::FunctionCallNode> expression);
-    llvm::Value *GenerateBlock(std::shared_ptr<ast::Block> block, llvm::Function * llvmFunc);
-public:
-    CodeGen(std::shared_ptr<ast::Assembly> tree, std::string outFile="");
+        void GenerateAssembly(std::shared_ptr<ast::Assembly> assembly);
+        llvm::Value *GenerateFunction(std::shared_ptr<ast::Function> function);
+        llvm::Value *GenerateExpression(std::shared_ptr<ast::Expression> expression);
+        llvm::Value *GenerateBinaryExpression(std::shared_ptr<ast::BinaryExpressionNode> expression);
+        llvm::Value *GenerateIntegerMath(std::string op, llvm::Value *lhs, llvm::Value *rhs);
+        llvm::Value *GenerateFloatingPointMath(std::string op, llvm::Value *lhs, llvm::Value *rhs);
+        llvm::Value *GenerateFunctionCall(std::shared_ptr<ast::FunctionCallNode> expression);
+        llvm::Value *GenerateBlock(std::shared_ptr<ast::Block> block, llvm::Function * llvmFunc);
+    public:
+        CodeGen(std::shared_ptr<ast::Assembly> tree, std::string outFile="");
 
-    void Generate();
-    void RunJit();
-    void FreeResources();
-};
+        void Generate();
+        void RunJit();
+        void FreeResources();
+    };
+}

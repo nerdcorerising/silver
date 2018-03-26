@@ -39,7 +39,7 @@ namespace ast
         for (auto it = mExpressions.begin(); it < mExpressions.end(); ++it)
         {
             newLine(out, indent);
-            (*it)->prettyPrint(out);
+            (*it)->prettyPrint(out, indent);
             out << ";";
         }
 
@@ -70,17 +70,23 @@ namespace ast
         return mName;
     }
 
+    void Assembly::prettyPrint(ostream &out)
+    {
+        prettyPrint(out, 0);
+    }
+
     void Assembly::prettyPrint(ostream &out, size_t indent)
     {
         out << "Assembly name: " << mName;
         ++indent;
-        newLine(out, indent);
 
         for (auto it = mFunctions.begin(); it < mFunctions.end(); ++it)
         {
-            (*it)->prettyPrint(out, indent);
             newLine(out, indent);
+            (*it)->prettyPrint(out, indent);
         }
+
+        newLine(out, 0);
     }
 
     Function::Function(shared_ptr<Block> block, string name, vector<shared_ptr<Argument>> arguments, string returnType) :
@@ -217,7 +223,7 @@ namespace ast
         UNREFERENCED(indent);
 
         out << "return ";
-        mExpression->prettyPrint(out);
+        mExpression->prettyPrint(out, indent);
     }
 
     CastNode::CastNode(string castType, shared_ptr<Expression> expression) :
@@ -439,8 +445,10 @@ namespace ast
 
     void FunctionCallNode::prettyPrint(ostream &out, size_t indent)
     {
-        out << "Function call" << endl;
-        out << "name: [" << mName << "] " << endl;
+        out << "Function call";
+        newLine(out, indent);
+        out << "name: [" << mName << "] ";
+        newLine(out, indent);
         out << "Args: ";
 
         for (auto it = mArgs.begin(); it != mArgs.end(); ++it)
@@ -473,7 +481,14 @@ namespace ast
 
     void ElseIfNode::prettyPrint(ostream &out, size_t indent)
     {
-        throw "not implemented";
+        out << "Else If Node";
+        newLine(out, indent + 1);
+        out << "Condition: ";
+        newLine(out, indent);
+        mCondition->prettyPrint(out, indent + 1);
+        newLine(out, indent);
+        out << "Block: ";
+        mBlock->prettyPrint(out, indent + 1);
     }
 
     IfNode::IfNode(shared_ptr<Expression> condition, 
@@ -515,7 +530,25 @@ namespace ast
 
     void IfNode::prettyPrint(ostream &out, size_t indent)
     {
-        throw "not implemented";
+        out << "If Node";
+        newLine(out, indent);
+        out << "Condition: ";
+        mCondition->prettyPrint(out, indent);
+        newLine(out, indent);
+        out << "Block: ";
+        mIfBlock->prettyPrint(out, indent);
+        newLine(out, indent);
+
+        for (auto it = mElseIfs.begin(); it != mElseIfs.end(); ++it)
+        {
+            (*it)->prettyPrint(out, indent);
+        }
+
+        if (mElseBlock != nullptr)
+        {
+            out << "Else block: ";
+            mElseBlock->prettyPrint(out, indent);
+        }
     }
 
     WhileNode::WhileNode(shared_ptr<Expression> condition, shared_ptr<Block> block) :
@@ -542,7 +575,13 @@ namespace ast
 
     void WhileNode::prettyPrint(ostream &out, size_t indent)
     {
-        throw "not implemented";
+        out << "While Node";
+        newLine(out, indent);
+        out << "Condition: ";
+        mCondition->prettyPrint(out, indent);
+        newLine(out, indent);
+        out << "Block: ";
+        mBlock->prettyPrint(out, indent);
     }
 
 }

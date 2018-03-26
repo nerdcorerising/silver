@@ -4,11 +4,14 @@
 #include <algorithm>
 #include <string>
 
-#include "parser.h"
 #include "tokenizer.h"
+#include "parser.h"
+#include "optimizationpass.h"
 #include "codegen.h"
 
 using namespace std;
+using namespace optimization;
+using namespace codegen;
 
 void waitForKey();
 
@@ -19,11 +22,12 @@ public:
         runJit(true),
         genByteCode(false)
     {
-
+        buildType = BuildType::Debug;
     }
 
     bool runJit;
     bool genByteCode;
+    BuildType buildType;
 };
 
 typedef ProgramOpts Opts;
@@ -52,6 +56,14 @@ Opts getOpts(int argc, char **argv)
             else if (realArg == "bytecode")
             {
                 opt.genByteCode = true;
+            }
+            else if (realArg == "debug")
+            {
+                opt.buildType = BuildType::Debug;
+            }
+            else if (realArg == "release")
+            {
+                opt.buildType = BuildType::Release;
             }
         }
     }
@@ -83,13 +95,17 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    CodeGen gen(node);
+    OptimizationPassManager optimizations(opt.buildType);
+    optimizations.performPasses(node);
 
+    string out = "";
     if (opt.genByteCode)
     {
-        string out = "sampleoutput.bc";
-        gen.Generate();
+        out = "sampleoutput.bc";
     }
+
+    CodeGen gen(node, out);
+    gen.Generate();
 
     if (opt.runJit)
     {
