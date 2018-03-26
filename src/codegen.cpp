@@ -470,7 +470,7 @@ namespace codegen
         }
     }
 
-    llvm::Value *CodeGen::GenerateBlock(shared_ptr<Block> block, llvm::Function * llvmFunc)
+    llvm::Value *CodeGen::GenerateBlock(shared_ptr<BlockNode> block, llvm::Function * llvmFunc)
     {
         mTable.enterContext();
 

@@ -167,12 +167,12 @@ namespace parse
             advance();
         }
 
-        shared_ptr<Block> block = parseBlock();
+        shared_ptr<BlockNode> block = parseBlock();
 
         return shared_ptr<Function>(new Function(block, name, args, returnType));
     }
 
-    shared_ptr<Block> Parser::parseBlock()
+    shared_ptr<BlockNode> Parser::parseBlock()
     {
         expectCurrentTokenType(TokenType::LeftBrace, "Expected curly brace to open block");
 
@@ -186,7 +186,7 @@ namespace parse
         }
 
         advance();
-        return shared_ptr<Block>(new Block(expressions));
+        return shared_ptr<BlockNode>(new BlockNode(expressions));
     }
 
     vector<shared_ptr<Expression>> Parser::parseFunctionArgs()
@@ -438,7 +438,7 @@ namespace parse
 
         shared_ptr<Expression> condition = parseIfWhileCondition();
 
-        shared_ptr<Block> block = parseBlock();
+        shared_ptr<BlockNode> block = parseBlock();
 
         return shared_ptr<Expression>(new WhileNode(condition, block));
     }
@@ -451,7 +451,7 @@ namespace parse
 
         shared_ptr<Expression> condition = parseIfWhileCondition();
 
-        shared_ptr<Block> block = parseBlock();
+        shared_ptr<BlockNode> block = parseBlock();
 
         vector<shared_ptr<ElseIfNode>> elseIfs;
         while (current().type() == TokenType::Keyword && current().text() == "elif")
@@ -459,13 +459,13 @@ namespace parse
             advance();
 
             shared_ptr<Expression> elseIfCondition = parseIfWhileCondition();
-            shared_ptr<Block> elseIfBlock = parseBlock();
+            shared_ptr<BlockNode> elseIfBlock = parseBlock();
 
             shared_ptr<ElseIfNode> elseIfNode = shared_ptr<ElseIfNode>(new ElseIfNode(elseIfCondition, elseIfBlock));
             elseIfs.push_back(elseIfNode);
         }
 
-        shared_ptr<Block> elseBlock;
+        shared_ptr<BlockNode> elseBlock;
         if (current().type() == TokenType::Keyword && current().text() == "else")
         {
             advance();

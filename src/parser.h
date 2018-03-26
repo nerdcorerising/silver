@@ -22,7 +22,7 @@ namespace parse
 
         std::vector<std::shared_ptr<ast::Argument>> parseArgumentsForDeclaration();
         std::shared_ptr<ast::Function> parseFunction();
-        std::shared_ptr<ast::Block> parseBlock();
+        std::shared_ptr<ast::BlockNode> parseBlock();
 
         std::shared_ptr<ast::Expression> parseIfWhileCondition();
         std::shared_ptr<ast::Expression> parseWhile();

@@ -29,7 +29,8 @@ namespace ast
         Cast,
         If,
         ElseIf,
-        While
+        While,
+        Block
     };
 
     class Node
@@ -61,17 +62,27 @@ namespace ast
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
     };
 
-    class Block : public Node
+    class Expression : public Node
+    {
+    public:
+        Expression() = default;
+        virtual ~Expression() = default;
+
+        virtual ExpressionType getExpressionType() = 0;
+    };
+
+    class BlockNode : public Expression
     {
     private:
         std::vector<std::shared_ptr<Expression>> mExpressions;
 
     public:
-        Block(std::vector<std::shared_ptr<Expression>> expressions);
-        virtual ~Block() = default;
+        BlockNode(std::vector<std::shared_ptr<Expression>> expressions);
+        virtual ~BlockNode() = default;
 
+        virtual ExpressionType getExpressionType() override;
         size_t size();
-        std::vector<std::shared_ptr<Expression>> getExpressions();
+        std::vector<std::shared_ptr<Expression>> &getExpressions();
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
     };
 
@@ -92,33 +103,24 @@ namespace ast
     class Function : public Node
     {
     private:
-        std::shared_ptr<Block> mBlock;
+        std::shared_ptr<BlockNode> mBlock;
         std::string mName;
         std::vector<std::shared_ptr<Argument>> mArgs;
         std::string mReturnType;
 
     public:
-        Function(std::shared_ptr<Block> block, 
+        Function(std::shared_ptr<BlockNode> block, 
                  std::string name, 
                  std::vector<std::shared_ptr<Argument>> arguments, 
                  std::string returnType);
         virtual ~Function() = default;
 
-        std::shared_ptr<Block> getBlock();
+        std::shared_ptr<BlockNode> getBlock();
         std::string getName() const;
         std::string getReturnType() const;
         size_t argCount();
         std::vector<std::shared_ptr<Argument>> getArguments();
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
-    };
-
-    class Expression : public Node
-    {
-    public:
-        Expression() = default;
-        virtual ~Expression() = default;
-
-        virtual ExpressionType getExpressionType() = 0;
     };
 
     class DeclarationNode : public Expression
@@ -275,14 +277,14 @@ namespace ast
     {
     private:
         std::shared_ptr<Expression> mCondition;
-        std::shared_ptr<Block> mBlock;
+        std::shared_ptr<BlockNode> mBlock;
 
     public:
-        ElseIfNode(std::shared_ptr<Expression> condition, std::shared_ptr<Block> block);
+        ElseIfNode(std::shared_ptr<Expression> condition, std::shared_ptr<BlockNode> block);
         virtual ~ElseIfNode() = default;
 
         std::shared_ptr<Expression> getCondition();
-        std::shared_ptr<Block> getBlock();
+        std::shared_ptr<BlockNode> getBlock();
         virtual ExpressionType getExpressionType() override;
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
     };
@@ -291,21 +293,21 @@ namespace ast
     {
     private:
         std::shared_ptr<Expression> mCondition;
-        std::shared_ptr<Block> mIfBlock;
+        std::shared_ptr<BlockNode> mIfBlock;
         std::vector<std::shared_ptr<ElseIfNode>> mElseIfs;
-        std::shared_ptr<Block> mElseBlock;
+        std::shared_ptr<BlockNode> mElseBlock;
 
     public:
         IfNode(std::shared_ptr<Expression> condition, 
-               std::shared_ptr<Block> ifBlock, 
+               std::shared_ptr<BlockNode> ifBlock, 
                std::vector<std::shared_ptr<ElseIfNode>> elseIfs, 
-               std::shared_ptr<Block> elseBlock);
+               std::shared_ptr<BlockNode> elseBlock);
         virtual ~IfNode() = default;
 
         std::shared_ptr<Expression> getCondition();
-        std::shared_ptr<Block> getIfBlock();
+        std::shared_ptr<BlockNode> getIfBlock();
         std::vector<std::shared_ptr<ElseIfNode>> getElseIfs();
-        std::shared_ptr<Block> getElseBlock();
+        std::shared_ptr<BlockNode> getElseBlock();
         virtual ExpressionType getExpressionType() override;
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
     };
@@ -314,14 +316,14 @@ namespace ast
     {
     private:
         std::shared_ptr<Expression> mCondition;
-        std::shared_ptr<Block> mBlock;
+        std::shared_ptr<BlockNode> mBlock;
 
     public:
-        WhileNode(std::shared_ptr<Expression> condition, std::shared_ptr<Block> block);
+        WhileNode(std::shared_ptr<Expression> condition, std::shared_ptr<BlockNode> block);
         virtual ~WhileNode() = default;
 
         std::shared_ptr<Expression> getCondition();
-        std::shared_ptr<Block> getBlock();
+        std::shared_ptr<BlockNode> getBlock();
         virtual ExpressionType getExpressionType() override;
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
     };

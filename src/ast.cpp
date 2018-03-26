@@ -15,23 +15,28 @@ namespace ast
         }
     }
 
-    Block::Block(vector<shared_ptr<Expression>> expressions) :
+    BlockNode::BlockNode(vector<shared_ptr<Expression>> expressions) :
         mExpressions(expressions)
     {
 
     }
 
-    size_t Block::size()
+    ExpressionType BlockNode::getExpressionType()
+    {
+        return ExpressionType::Block;
+    }
+
+    size_t BlockNode::size()
     {
         return mExpressions.size();
     }
 
-    vector<shared_ptr<Expression>> Block::getExpressions()
+    vector<shared_ptr<Expression>> &BlockNode::getExpressions()
     {
         return mExpressions;
     }
 
-    void Block::prettyPrint(ostream &out, size_t indent)
+    void BlockNode::prettyPrint(ostream &out, size_t indent)
     {
         out << "{";
         ++indent;
@@ -89,7 +94,7 @@ namespace ast
         newLine(out, 0);
     }
 
-    Function::Function(shared_ptr<Block> block, string name, vector<shared_ptr<Argument>> arguments, string returnType) :
+    Function::Function(shared_ptr<BlockNode> block, string name, vector<shared_ptr<Argument>> arguments, string returnType) :
         mBlock(block),
         mName(name),
         mArgs(arguments),
@@ -98,7 +103,7 @@ namespace ast
         ASSERT(mBlock != nullptr);
     }
 
-    shared_ptr<Block> Function::getBlock()
+    shared_ptr<BlockNode> Function::getBlock()
     {
         return mBlock;
     }
@@ -457,7 +462,7 @@ namespace ast
         }
     }
 
-    ElseIfNode::ElseIfNode(shared_ptr<Expression> condition, shared_ptr<Block> block) :
+    ElseIfNode::ElseIfNode(shared_ptr<Expression> condition, shared_ptr<BlockNode> block) :
         mCondition(condition),
         mBlock(block)
     {
@@ -469,7 +474,7 @@ namespace ast
         return mCondition;
     }
 
-    shared_ptr<Block> ElseIfNode::getBlock()
+    shared_ptr<BlockNode> ElseIfNode::getBlock()
     {
         return mBlock;
     }
@@ -492,9 +497,9 @@ namespace ast
     }
 
     IfNode::IfNode(shared_ptr<Expression> condition, 
-                   shared_ptr<Block> ifBlock, 
+                   shared_ptr<BlockNode> ifBlock, 
                    vector<shared_ptr<ElseIfNode>> elseIfs, 
-                   shared_ptr<Block> elseBlock) :
+                   shared_ptr<BlockNode> elseBlock) :
         mCondition(condition),
         mIfBlock(ifBlock),
         mElseIfs(elseIfs),
@@ -508,7 +513,7 @@ namespace ast
         return mCondition;
     }
 
-    shared_ptr<Block> IfNode::getIfBlock()
+    shared_ptr<BlockNode> IfNode::getIfBlock()
     {
         return mIfBlock;
     }
@@ -518,7 +523,7 @@ namespace ast
         return mElseIfs;
     }
 
-    shared_ptr<Block> IfNode::getElseBlock()
+    shared_ptr<BlockNode> IfNode::getElseBlock()
     {
         return mElseBlock;
     }
@@ -551,7 +556,7 @@ namespace ast
         }
     }
 
-    WhileNode::WhileNode(shared_ptr<Expression> condition, shared_ptr<Block> block) :
+    WhileNode::WhileNode(shared_ptr<Expression> condition, shared_ptr<BlockNode> block) :
         mCondition(condition),
         mBlock(block)
     {
@@ -563,7 +568,7 @@ namespace ast
         return mCondition;
     }
 
-    shared_ptr<Block> WhileNode::getBlock()
+    shared_ptr<BlockNode> WhileNode::getBlock()
     {
         return mBlock;
     }
