@@ -131,8 +131,7 @@ namespace ast
         std::shared_ptr<Expression> mExpression;
 
     public:
-        DeclarationNode(std::string type, std::string name);
-        DeclarationNode(std::shared_ptr<Expression> expression, std::string name);
+        DeclarationNode(std::string name, std::string type, std::shared_ptr<Expression> expression);
         virtual ~DeclarationNode() = default;
 
         virtual ExpressionType getExpressionType() override;

@@ -9,7 +9,7 @@
 #include "tokenmanager.h"
 #include "ast/ast.h"
 
-#define PARSE_ERROR(MSG) std::cout << MSG; throw "parse error" //; waitForKey(); exit(-1)
+#define PARSE_ERROR(MSG) std::cout << MSG; throw "parse error"
 
 namespace parse
 {

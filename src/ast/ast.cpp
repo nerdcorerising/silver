@@ -164,20 +164,11 @@ namespace ast
         mBlock->prettyPrint(out, indent + 1);
     }
 
-    DeclarationNode::DeclarationNode(string type, string name) :
+    DeclarationNode::DeclarationNode(string name, string type, shared_ptr<Expression> expression) :
+        mName(name),
         mType(type),
-        mName(name),
-        mExpression(nullptr)
-    {
-    }
-
-
-    DeclarationNode::DeclarationNode(shared_ptr<Expression> expression, std::string name) :
-        mType(),
-        mName(name),
         mExpression(expression)
     {
-
     }
 
     ExpressionType DeclarationNode::getExpressionType()

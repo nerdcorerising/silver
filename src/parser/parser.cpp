@@ -487,6 +487,9 @@ namespace parse
 
         string name = current().text();
         advance();
+        
+        shared_ptr<Expression> expression;
+        string type;
 
         if (current().type() == TokenType::Colon)
         {
@@ -494,22 +497,20 @@ namespace parse
 
             expectCurrentTokenType(TokenType::Identifier, "Expected type in declaration.");
 
-            string type = current().text();
+            type = current().text();
             advance();
-
-            return shared_ptr<Expression>(new DeclarationNode(type, name));
         }
         else if (current().type() == TokenType::Operator && current().text() == "=")
         {
             advance();
-            shared_ptr<Expression> expression = parseStatement();
-
-            return shared_ptr<Expression>(new DeclarationNode(expression, name));
+            expression = parseStatement();
         }
         else
         {
             PARSE_ERROR("Expected : or = after let");
         }
+
+        return shared_ptr<Expression>(new DeclarationNode(name, type, expression));
     }
 
     shared_ptr<Assembly> Parser::parse()

@@ -14,13 +14,14 @@ namespace optimization
         }
 
         vector<shared_ptr<Expression>> &expressions = block->getExpressions();
-        for (auto it = expressions.begin(); it != expressions.end(); ++it)
+        for (int i = 0; i < expressions.size(); ++i)
         {
-            switch ((*it)->getExpressionType())
+            shared_ptr<Expression> current = expressions[i];
+            switch (current->getExpressionType())
             {
             case ExpressionType::If:
             {
-                shared_ptr<IfNode> ifNode = dynamic_pointer_cast<IfNode>(*it);
+                shared_ptr<IfNode> ifNode = dynamic_pointer_cast<IfNode>(current);
                 shared_ptr<BlockNode> subBlock = ifNode->getIfBlock();
                 performPassOnBlock(subBlock);
 
@@ -36,22 +37,27 @@ namespace optimization
             break;
             case ExpressionType::While:
             {
-                shared_ptr<WhileNode> whileNode = dynamic_pointer_cast<WhileNode>(*it);
+                shared_ptr<WhileNode> whileNode = dynamic_pointer_cast<WhileNode>(current);
                 shared_ptr<BlockNode> whileBlock = whileNode->getBlock();
                 performPassOnBlock(whileBlock);
             }
             break;
             case ExpressionType::Block:
             {
-                shared_ptr<BlockNode> subBlock = dynamic_pointer_cast<BlockNode>(*it);
+                shared_ptr<BlockNode> subBlock = dynamic_pointer_cast<BlockNode>(current);
                 performPassOnBlock(subBlock);
             }
             break;
             case ExpressionType::Declaration:
             {
-                // Need to make the declaration with an assignment be two expressions,
-                // first a declaration by itself with no type and then an assignment
-                throw "not implemented";
+                shared_ptr<DeclarationNode> declaration = dynamic_pointer_cast<DeclarationNode>(current);
+                if (declaration->getTypeName() == "" && declaration->getExpression() != nullptr)
+                {
+                    shared_ptr<Expression> identifier = shared_ptr<Expression>(new IdentifierNode(declaration->getName()));
+                    shared_ptr<Expression> assignment = shared_ptr<Expression>(new BinaryExpressionNode(identifier, declaration->getExpression(), "="));
+
+                    expressions.insert(expressions.begin() + (i + 1), assignment);
+                }
             }
             break;
             default:

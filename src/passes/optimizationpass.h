@@ -7,6 +7,8 @@
 #include "common.h"
 #include "ast/ast.h"
 
+#define OPTIMIZATION_ERROR(MSG) std::cout << MSG; throw "optimization error"
+
 namespace optimization
 {
     // TODO passes
