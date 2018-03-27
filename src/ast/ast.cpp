@@ -458,48 +458,9 @@ namespace ast
         }
     }
 
-    ElseIfNode::ElseIfNode(shared_ptr<Expression> condition, shared_ptr<BlockNode> block) :
+    IfNode::IfNode(shared_ptr<Expression> condition, shared_ptr<BlockNode> block) :
         mCondition(condition),
         mBlock(block)
-    {
-
-    }
-
-    shared_ptr<Expression> ElseIfNode::getCondition()
-    {
-        return mCondition;
-    }
-
-    shared_ptr<BlockNode> ElseIfNode::getBlock()
-    {
-        return mBlock;
-    }
-
-    ExpressionType ElseIfNode::getExpressionType()
-    {
-        return ExpressionType::ElseIf;
-    }
-
-    void ElseIfNode::prettyPrint(ostream &out, size_t indent)
-    {
-        out << "Else If Node";
-        newLine(out, indent + 1);
-        out << "Condition: ";
-        newLine(out, indent);
-        mCondition->prettyPrint(out, indent + 1);
-        newLine(out, indent);
-        out << "Block: ";
-        mBlock->prettyPrint(out, indent + 1);
-    }
-
-    IfNode::IfNode(shared_ptr<Expression> condition, 
-                   shared_ptr<BlockNode> ifBlock, 
-                   vector<shared_ptr<ElseIfNode>> elseIfs, 
-                   shared_ptr<BlockNode> elseBlock) :
-        mCondition(condition),
-        mIfBlock(ifBlock),
-        mElseIfs(elseIfs),
-        mElseBlock(elseBlock)
     {
 
     }
@@ -509,19 +470,9 @@ namespace ast
         return mCondition;
     }
 
-    shared_ptr<BlockNode> IfNode::getIfBlock()
+    shared_ptr<BlockNode> IfNode::getBlock()
     {
-        return mIfBlock;
-    }
-
-    vector<shared_ptr<ElseIfNode>> IfNode::getElseIfs()
-    {
-        return mElseIfs;
-    }
-
-    shared_ptr<BlockNode> IfNode::getElseBlock()
-    {
-        return mElseBlock;
+        return mBlock;
     }
 
     ExpressionType IfNode::getExpressionType()
@@ -532,15 +483,42 @@ namespace ast
     void IfNode::prettyPrint(ostream &out, size_t indent)
     {
         out << "If Node";
-        newLine(out, indent);
+        newLine(out, indent + 1);
         out << "Condition: ";
-        mCondition->prettyPrint(out, indent);
+        mCondition->prettyPrint(out, indent + 1);
         newLine(out, indent);
         out << "Block: ";
-        mIfBlock->prettyPrint(out, indent);
+        mBlock->prettyPrint(out, indent + 1);
+    }
+
+    IfBlockNode::IfBlockNode(std::vector<shared_ptr<IfNode>> ifs, shared_ptr<BlockNode> elseBlock) :
+        mIfs(ifs),
+        mElseBlock(elseBlock)
+    {
+
+    }
+
+    vector<shared_ptr<IfNode>> IfBlockNode::getIfs()
+    {
+        return mIfs;
+    }
+
+    shared_ptr<BlockNode> IfBlockNode::getElseBlock()
+    {
+        return mElseBlock;
+    }
+
+    ExpressionType IfBlockNode::getExpressionType()
+    {
+        return ExpressionType::IfBlock;
+    }
+
+    void IfBlockNode::prettyPrint(ostream &out, size_t indent)
+    {
+        out << "If Block Node";
         newLine(out, indent);
 
-        for (auto it = mElseIfs.begin(); it != mElseIfs.end(); ++it)
+        for (auto it = mIfs.begin(); it != mIfs.end(); ++it)
         {
             (*it)->prettyPrint(out, indent);
         }

@@ -11,8 +11,8 @@ namespace optimization
     {
         switch (expression->getExpressionType())
         {
+        case ExpressionType::IfBlock:
         case ExpressionType::If:
-        case ExpressionType::ElseIf:
         {
             OPTIMIZATION_ERROR("Cannot assign result of If to variable");
         }
@@ -27,51 +27,51 @@ namespace optimization
             OPTIMIZATION_ERROR("Cannot assign result of block to variable");
         }
         break;
-        case IntegerLiteral:
+        case ExpressionType::IntegerLiteral:
         {
             return "int";
         }
         break;
-        case FloatLiteral:
+        case ExpressionType::FloatLiteral:
         {
             return "float";
         }
         break;
-        case StringLiteral:
+        case ExpressionType::StringLiteral:
         {
             return "string";
         }
         break;
-        case UnaryOperator:
+        case ExpressionType::UnaryOperator:
         {
             throw "not implemented";
             // return ;
         }
         break;
-        case BinaryOperator:
+        case ExpressionType::BinaryOperator:
         {
             throw "not implemented";
             // return ;
         }
         break;
-        case Empty:
+        case ExpressionType::Empty:
         {
             OPTIMIZATION_ERROR("Cannot assign result of empty statement to variable");
         }
         break;
-        case Identifier:
+        case ExpressionType::Identifier:
         {
             shared_ptr<IdentifierNode> identifier = dynamic_pointer_cast<IdentifierNode>(expression);
             string type = symbols.get(identifier->getValue());
             return type;
         }
         break;
-        case Declaration:
+        case ExpressionType::Declaration:
         {
             OPTIMIZATION_ERROR("Cannot assign result of declaration statement to variable");
         }
         break;
-        case FunctionCall:
+        case ExpressionType::FunctionCall:
         {
             shared_ptr<FunctionCallNode> call = dynamic_pointer_cast<FunctionCallNode>(expression);
             string funcName = call->getName() + "()";
@@ -79,12 +79,12 @@ namespace optimization
             return type;
         }
         break;
-        case Return:
+        case ExpressionType::Return:
         {
             OPTIMIZATION_ERROR("Cannot assign result of return statement to variable");
         }
         break;
-        case Cast:
+        case ExpressionType::Cast:
         {
             throw "not implemented";
             // return ;

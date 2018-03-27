@@ -38,15 +38,14 @@ namespace optimization
         {
             switch ((*current)->getExpressionType())
             {
-            case ExpressionType::If:
+            case ExpressionType::IfBlock:
             {
-                shared_ptr<IfNode> ifNode = dynamic_pointer_cast<IfNode>(*current);
-                shared_ptr<BlockNode> subBlock = ifNode->getIfBlock();
-                performPassOnBlock(subBlock, symbols);
-
-                for (auto elseIf = ifNode->getElseIfs().begin(); elseIf != ifNode->getElseIfs().end(); ++elseIf)
+                shared_ptr<IfBlockNode> ifNode = dynamic_pointer_cast<IfBlockNode>(*current);
+                shared_ptr<BlockNode> subBlock;
+                vector<shared_ptr<IfNode>> ifs = ifNode->getIfs();
+                for (auto it = ifs.begin(); it != ifs.end(); ++it)
                 {
-                    subBlock = (*elseIf)->getBlock();
+                    subBlock = (*it)->getBlock();
                     performPassOnBlock(subBlock, symbols);
                 }
 
@@ -89,7 +88,7 @@ namespace optimization
     {
         SymbolTable<string, string> symbols;
         defineFunctions(assembly, symbols);
-        
+
         vector<shared_ptr<Function>> functions = assembly->getFunctions();
         for (auto func = functions.begin(); func != functions.end(); ++func)
         {

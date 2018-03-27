@@ -59,7 +59,7 @@ if [[ $rc != 0 ]]; then
 fi
 
 
-make -j12
+make
 rc=$?
 if [[ $rc != 0 ]]; then 
 	popd;

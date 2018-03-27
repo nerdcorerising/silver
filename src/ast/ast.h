@@ -27,8 +27,8 @@ namespace ast
         FunctionCall,
         Return,
         Cast,
+        IfBlock,
         If,
-        ElseIf,
         While,
         Block
     };
@@ -273,15 +273,15 @@ namespace ast
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
     };
 
-    class ElseIfNode : public Expression
+    class IfNode : public Expression
     {
     private:
         std::shared_ptr<Expression> mCondition;
         std::shared_ptr<BlockNode> mBlock;
 
     public:
-        ElseIfNode(std::shared_ptr<Expression> condition, std::shared_ptr<BlockNode> block);
-        virtual ~ElseIfNode() = default;
+        IfNode(std::shared_ptr<Expression> condition, std::shared_ptr<BlockNode> block);
+        virtual ~IfNode() = default;
 
         std::shared_ptr<Expression> getCondition();
         std::shared_ptr<BlockNode> getBlock();
@@ -289,24 +289,17 @@ namespace ast
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
     };
 
-    class IfNode : public Expression
+    class IfBlockNode : public Expression
     {
     private:
-        std::shared_ptr<Expression> mCondition;
-        std::shared_ptr<BlockNode> mIfBlock;
-        std::vector<std::shared_ptr<ElseIfNode>> mElseIfs;
+        std::vector<std::shared_ptr<IfNode>> mIfs;
         std::shared_ptr<BlockNode> mElseBlock;
 
     public:
-        IfNode(std::shared_ptr<Expression> condition, 
-               std::shared_ptr<BlockNode> ifBlock, 
-               std::vector<std::shared_ptr<ElseIfNode>> elseIfs, 
-               std::shared_ptr<BlockNode> elseBlock);
-        virtual ~IfNode() = default;
+        IfBlockNode(std::vector<std::shared_ptr<IfNode>> ifs, std::shared_ptr<BlockNode> elseBlock);
+        virtual ~IfBlockNode() = default;
 
-        std::shared_ptr<Expression> getCondition();
-        std::shared_ptr<BlockNode> getIfBlock();
-        std::vector<std::shared_ptr<ElseIfNode>> getElseIfs();
+        std::vector<std::shared_ptr<IfNode>> getIfs();
         std::shared_ptr<BlockNode> getElseBlock();
         virtual ExpressionType getExpressionType() override;
         virtual void prettyPrint(std::ostream &out, size_t indent) override;

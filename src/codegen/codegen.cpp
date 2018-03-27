@@ -323,9 +323,87 @@ namespace codegen
         return mBuilder.CreateCall(func, args);
     }
 
-    void CodeGen::generateIf(std::shared_ptr<ast::IfNode> ifNode)
+    void CodeGen::generateIf(shared_ptr<IfBlockNode> ifNode)
     {
-        throw "not implemented";
+        llvm::BasicBlock *preheaderBlock = mBuilder.GetInsertBlock();
+        llvm::Function *function = preheaderBlock->getParent();
+
+        vector<shared_ptr<IfNode>> ifs = ifNode->getIfs();
+        shared_ptr<IfNode> current = ifs[0];
+        llvm::BasicBlock *currentConditionBlock = llvm::BasicBlock::Create(mContext, "if condition", function);
+        llvm::BasicBlock *currentBodyBlock = llvm::BasicBlock::Create(mContext, "if body", function);
+        mBuilder.SetInsertPoint(preheaderBlock);
+        mBuilder.CreateBr(currentConditionBlock);
+        int pos = 1;
+        shared_ptr<IfNode> next = ifs.size() > pos ? ifs[pos] : nullptr;
+
+        vector<llvm::BasicBlock *> bodyBlocks;
+        bodyBlocks.push_back(currentBodyBlock);
+        llvm::Value *cmp;
+        while (next != nullptr)
+        {
+            llvm::BasicBlock *nextConditionBlock = llvm::BasicBlock::Create(mContext, "elif condition", function);
+            llvm::BasicBlock *nextBodyBlock = llvm::BasicBlock::Create(mContext, "elif body", function);
+            bodyBlocks.push_back(nextBodyBlock);
+
+            mBuilder.SetInsertPoint(currentConditionBlock);
+            cmp = generateExpression(current->getCondition());
+            mBuilder.CreateCondBr(cmp, currentBodyBlock, nextConditionBlock);
+
+            generateIntoBlock(currentBodyBlock, current->getBlock());
+
+            currentConditionBlock = nextConditionBlock;
+            currentBodyBlock = nextBodyBlock;
+            current = next;
+            ++pos;
+            next = ifs.size() > pos ? ifs[pos] : nullptr;
+        }
+        
+        mBuilder.SetInsertPoint(currentConditionBlock);
+        cmp = generateExpression(current->getCondition());
+        
+        generateIntoBlock(currentBodyBlock, current->getBlock());
+
+        shared_ptr<BlockNode> elseBlock = ifNode->getElseBlock();
+        llvm::BasicBlock *end;
+        if (elseBlock != nullptr)
+        {
+            llvm::BasicBlock *elseBasicBlock = llvm::BasicBlock::Create(mContext, "else body", function);
+            bodyBlocks.push_back(elseBasicBlock);
+            generateIntoBlock(elseBasicBlock, elseBlock);
+
+            mBuilder.SetInsertPoint(currentConditionBlock);
+            mBuilder.CreateCondBr(cmp, currentBodyBlock, elseBasicBlock);
+
+            end = llvm::BasicBlock::Create(mContext, "end of if block", function);
+        }
+        else
+        {
+            end = llvm::BasicBlock::Create(mContext, "end of if block", function);
+            mBuilder.SetInsertPoint(currentConditionBlock);
+            mBuilder.CreateCondBr(cmp, currentBodyBlock, end);
+        }
+
+        bool didNotTerminateAny = true;
+        for (auto it = bodyBlocks.begin(); it != bodyBlocks.end(); ++it)
+        {
+            if ((*it)->getTerminator() == nullptr)
+            {
+                mBuilder.SetInsertPoint(*it);
+                mBuilder.CreateBr(end);
+                didNotTerminateAny = false;
+            }
+        }
+
+        if (didNotTerminateAny)
+        {
+            end->eraseFromParent();
+        }
+        else
+        {
+            mBuilder.SetInsertPoint(end);
+        }
+
     }
 
     void CodeGen::generateWhile(std::shared_ptr<ast::WhileNode> whileNode)
@@ -434,9 +512,9 @@ namespace codegen
         }
         case ExpressionType::Empty:
             return nullptr;
-        case ExpressionType::If:
+        case ExpressionType::IfBlock:
         {
-            shared_ptr<IfNode> ifNode = dynamic_pointer_cast<IfNode>(expression);
+            shared_ptr<IfBlockNode> ifNode = dynamic_pointer_cast<IfBlockNode>(expression);
             generateIf(ifNode);
             // TODO: should refactor so this doesn't get called
             return nullptr;

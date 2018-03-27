@@ -175,8 +175,8 @@ namespace parse
     shared_ptr<BlockNode> Parser::parseBlock()
     {
         expectCurrentTokenType(TokenType::LeftBrace, "Expected curly brace to open block");
-
         advance();
+
         vector<shared_ptr<Expression>> expressions;
 
         while (current().type() != TokenType::RightBrace)
@@ -186,6 +186,7 @@ namespace parse
         }
 
         advance();
+        
         return shared_ptr<BlockNode>(new BlockNode(expressions));
     }
 
@@ -449,11 +450,12 @@ namespace parse
         // skip if
         advance();
 
+        vector<shared_ptr<IfNode>> ifs;
+
         shared_ptr<Expression> condition = parseIfWhileCondition();
-
         shared_ptr<BlockNode> block = parseBlock();
+        ifs.push_back(shared_ptr<IfNode>(new IfNode(condition, block)));
 
-        vector<shared_ptr<ElseIfNode>> elseIfs;
         while (current().type() == TokenType::Keyword && current().text() == "elif")
         {
             advance();
@@ -461,8 +463,8 @@ namespace parse
             shared_ptr<Expression> elseIfCondition = parseIfWhileCondition();
             shared_ptr<BlockNode> elseIfBlock = parseBlock();
 
-            shared_ptr<ElseIfNode> elseIfNode = shared_ptr<ElseIfNode>(new ElseIfNode(elseIfCondition, elseIfBlock));
-            elseIfs.push_back(elseIfNode);
+            shared_ptr<IfNode> elseIfNode = shared_ptr<IfNode>(new IfNode(elseIfCondition, elseIfBlock));
+            ifs.push_back(elseIfNode);
         }
 
         shared_ptr<BlockNode> elseBlock;
@@ -473,7 +475,7 @@ namespace parse
             elseBlock = parseBlock();
         }
 
-        return shared_ptr<Expression>(new IfNode(condition, block, elseIfs, elseBlock));
+        return shared_ptr<Expression>(new IfBlockNode(ifs, elseBlock));
     }
 
     shared_ptr<Expression> Parser::parseLet()
