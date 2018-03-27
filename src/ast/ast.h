@@ -137,6 +137,7 @@ namespace ast
         virtual ExpressionType getExpressionType() override;
         std::string getName();
         std::string getTypeName();
+        void setTypeName(std::string type);
         std::shared_ptr<Expression> getExpression();
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
     };

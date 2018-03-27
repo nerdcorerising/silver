@@ -186,6 +186,11 @@ namespace ast
         return mType;
     }
 
+    void DeclarationNode::setTypeName(string type)
+    {
+        mType = type;
+    }
+
     shared_ptr<Expression> DeclarationNode::getExpression()
     {
         return mExpression;

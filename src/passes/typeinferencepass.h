@@ -11,11 +11,14 @@
 
 namespace optimization
 {
-    class HoistDeclarationPass : public Pass
+    class TypeInferencePass : public Pass
     {
+    private:
+        std::string getTypeForExpression(std::shared_ptr<ast::Expression> expression, SymbolTable<std::string, std::string> &symbols);
+
     public:
-        HoistDeclarationPass() = default;
-        virtual ~HoistDeclarationPass() = default;
+        TypeInferencePass() = default;
+        virtual ~TypeInferencePass() = default;
 
         virtual void performPass(std::shared_ptr<ast::BlockNode> block, SymbolTable<std::string, std::string> &symbols) override;
     };

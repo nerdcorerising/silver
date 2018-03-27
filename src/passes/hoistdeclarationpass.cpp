@@ -6,7 +6,7 @@ using namespace ast;
 
 namespace optimization
 {
-    void HoistDeclarationPass::performPassOnBlock(shared_ptr<BlockNode> block)
+    void HoistDeclarationPass::performPass(shared_ptr<BlockNode> block, SymbolTable<string, string> &symbols)
     {
         if (block == nullptr)
         {
@@ -17,38 +17,7 @@ namespace optimization
         for (int i = 0; i < expressions.size(); ++i)
         {
             shared_ptr<Expression> current = expressions[i];
-            switch (current->getExpressionType())
-            {
-            case ExpressionType::If:
-            {
-                shared_ptr<IfNode> ifNode = dynamic_pointer_cast<IfNode>(current);
-                shared_ptr<BlockNode> subBlock = ifNode->getIfBlock();
-                performPassOnBlock(subBlock);
-
-                for (auto elseIf = ifNode->getElseIfs().begin(); elseIf != ifNode->getElseIfs().end(); ++elseIf)
-                {
-                    subBlock = (*elseIf)->getBlock();
-                    performPassOnBlock(subBlock);
-                }
-
-                subBlock = ifNode->getElseBlock();
-                performPassOnBlock(subBlock);
-            }
-            break;
-            case ExpressionType::While:
-            {
-                shared_ptr<WhileNode> whileNode = dynamic_pointer_cast<WhileNode>(current);
-                shared_ptr<BlockNode> whileBlock = whileNode->getBlock();
-                performPassOnBlock(whileBlock);
-            }
-            break;
-            case ExpressionType::Block:
-            {
-                shared_ptr<BlockNode> subBlock = dynamic_pointer_cast<BlockNode>(current);
-                performPassOnBlock(subBlock);
-            }
-            break;
-            case ExpressionType::Declaration:
+            if (current->getExpressionType() == ExpressionType::Declaration)
             {
                 shared_ptr<DeclarationNode> declaration = dynamic_pointer_cast<DeclarationNode>(current);
                 if (declaration->getTypeName() == "" && declaration->getExpression() != nullptr)
@@ -59,19 +28,6 @@ namespace optimization
                     expressions.insert(expressions.begin() + (i + 1), assignment);
                 }
             }
-            break;
-            default:
-                break;
-            }
-        }
-    }
-
-    void HoistDeclarationPass::performPass(shared_ptr<Assembly> assembly)
-    {
-        vector<shared_ptr<Function>> functions = assembly->getFunctions();
-        for (auto it = functions.begin(); it != functions.end(); ++it)
-        {
-            performPassOnBlock((*it)->getBlock());
         }
     }
 }

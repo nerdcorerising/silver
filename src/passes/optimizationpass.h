@@ -5,9 +5,12 @@
 #include <string>
 
 #include "common.h"
+#include "symboltable.h"
 #include "ast/ast.h"
 
 #define OPTIMIZATION_ERROR(MSG) std::cout << MSG; throw "optimization error"
+
+// Also need to make a fill out symbol table pass
 
 namespace optimization
 {
@@ -29,12 +32,16 @@ namespace optimization
         Pass() = default;
         virtual ~Pass() = default;
 
-        virtual void performPass(std::shared_ptr<ast::Assembly> assembly) = 0;
+        virtual void performPass(std::shared_ptr<ast::BlockNode> block, SymbolTable<std::string, std::string> &symbols) = 0;
     };
 
     class OptimizationPassManager
     {
+    private:
         std::vector<std::shared_ptr<Pass>> mPasses;
+
+        void performPassOnBlock(std::shared_ptr<ast::BlockNode> block, SymbolTable<std::string, std::string> &symbols);
+        void defineFunctions(std::shared_ptr<ast::Assembly> assembly, SymbolTable<std::string, std::string> &symbols);
 
     public:
         OptimizationPassManager(BuildType type);

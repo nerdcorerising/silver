@@ -10,82 +10,34 @@ using namespace ast;
 
 namespace codegen
 {
-    SymbolTable::SymbolTable() :
-        mStack(),
-        mCurrent(),
-        mFunctions()
-    {
-
-    }
-
-    void SymbolTable::putVar(string name, llvm::AllocaInst *inst)
-    {
-        mCurrent.insert({name, inst});
-    }
-
-    llvm::AllocaInst *SymbolTable::getVar(string name)
-    {
-        auto it = mCurrent.find(name);
-        if (it == mCurrent.end())
-        {
-            bool found = false;
-            for (auto revIt = mStack.rbegin(); revIt != mStack.rend(); ++revIt)
-            {
-                it = (*revIt).find(name);
-                if (it != (*revIt).end())
-                {
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found)
-            {
-                return nullptr;
-            }
-        }
-
-        return (*it).second;
-    }
-
-    void SymbolTable::putFunc(string name, llvm::Function *func)
-    {
-        mFunctions.insert({ name, func });
-    }
-
-    llvm::Function *SymbolTable::getFunc(string name)
-    {
-        auto it = mFunctions.find(name);
-        if (it == mFunctions.end())
-        {
-            return nullptr;
-        }
-
-        return it->second;
-    }
-
-    void SymbolTable::enterContext()
-    {
-        mStack.push_back(mCurrent);
-        mCurrent.clear();
-    }
-
-    void SymbolTable::leaveContext()
-    {
-        mCurrent = mStack.at(mStack.size() - 1);
-        mStack.pop_back();
-    }
-
     CodeGen::CodeGen(shared_ptr<Assembly> tree, string outFile) :
         mTree(tree),
         mOutFile(outFile),
         mTable(),
+        mFunctions(),
         mContext(),
         mModule(),
         mBuilder(mContext),
         mFpm()
     {
 
+    }
+
+    void CodeGen::putFunc(string name, llvm::Function *func)
+    {
+        mFunctions.insert({name, func});
+    }
+
+    llvm::Function *CodeGen::getFunc(string name)
+    {
+        auto it = mFunctions.find(name);
+        if (it == mFunctions.end())
+        {
+            throw "uh oh!";
+            return nullptr;
+        }
+
+        return (*it).second;
     }
 
     llvm::Type *CodeGen::stringToType(string str)
@@ -112,32 +64,6 @@ namespace codegen
         }
     }
 
-    // llvm::Type *CodeGen::inferTypeFromExpression(shared_ptr<ast::Expression> expression)
-    // {
-    //     enum ExpressionType
-    //     {
-    //         IntegerLiteral,
-    //         FloatLiteral,
-    //         StringLiteral,
-    //         UnaryOperator,
-    //         BinaryOperator,
-    //         Empty,
-    //         Identifier,
-    //         Declaration,
-    //         FunctionCall,
-    //         Return,
-    //         Cast,
-    //         If,
-    //         ElseIf,
-    //         While
-    //     };
-
-    //     switch (expression->getExpressionType())
-    //     {
-
-    //     }
-    // }
-
     vector<llvm::Type *> CodeGen::getFunctionArgumentTypes(shared_ptr<Function> function)
     {
         vector<llvm::Type *> types;
@@ -152,26 +78,31 @@ namespace codegen
         return types;
     }
 
-    void CodeGen::GenerateAssembly(shared_ptr<Assembly> assembly)
+    void CodeGen::generateAssembly(shared_ptr<Assembly> assembly)
     {
         vector<shared_ptr<Function>> functions = assembly->getFunctions();
+        
         for (auto it = functions.begin(); it != functions.end(); ++it)
         {
             shared_ptr<Function> function = *it;
-            GenerateFunction(function);
+            generateFunctionPrototype(function);
+        }
+
+        for (auto it = functions.begin(); it != functions.end(); ++it)
+        {
+            shared_ptr<Function> function = *it;
+            generateFunction(function);
         }
     }
 
-    llvm::Value *CodeGen::GenerateFunction(shared_ptr<Function> function)
+    llvm::Function *CodeGen::generateFunctionPrototype(shared_ptr<Function> function)
     {
-        mTable.enterContext();
-
         llvm::Type *retType = stringToType(function->getReturnType());
         vector<llvm::Type *> argTypes = getFunctionArgumentTypes(function);
         llvm::FunctionType *type = llvm::FunctionType::get(retType, argTypes, false);
 
         llvm::Function *llvmFunc = llvm::cast<llvm::Function>(mModule->getOrInsertFunction(function->getName(), type));
-        mTable.putFunc(function->getName(), llvmFunc);
+        putFunc(function->getName(), llvmFunc);
 
         if (function->getName() == "main")
         {
@@ -182,6 +113,14 @@ namespace codegen
 
             mMain = llvmFunc;
         }
+
+        return llvmFunc;
+    }
+
+    llvm::Value *CodeGen::generateFunction(shared_ptr<Function> function)
+    {
+        mTable.enterContext();
+        llvm::Function *llvmFunc = getFunc(function->getName());
         llvm::BasicBlock::Create(mContext, "entry", llvmFunc, 0);
 
         //for (size_t i = 0; i < function->argCount(); ++i)
@@ -195,10 +134,10 @@ namespace codegen
 
             temp.CreateStore(&(*it), inst);
 
-            mTable.putVar(a->getName(), inst);
+            mTable.put(a->getName(), inst);
         }
 
-        GenerateBlock(function->getBlock(), llvmFunc);
+        generateBlock(function->getBlock(), llvmFunc);
 
         mFpm->run(*llvmFunc);
 
@@ -206,11 +145,11 @@ namespace codegen
         return llvmFunc;
     }
 
-    llvm::Value *CodeGen::GenerateBinaryExpression(shared_ptr<BinaryExpressionNode> expression)
+    llvm::Value *CodeGen::generateBinaryExpression(shared_ptr<BinaryExpressionNode> expression)
     {
         string op = expression->getOperator();
 
-        llvm::Value *rhs = GenerateExpression(expression->getRhs());
+        llvm::Value *rhs = generateExpression(expression->getRhs());
 
         if (op == "=")
         {
@@ -226,25 +165,25 @@ namespace codegen
             if (binLhs->getExpressionType() == Identifier)
             {
                 shared_ptr<IdentifierNode> castLhs = dynamic_pointer_cast<IdentifierNode>(binLhs);
-                inst = mTable.getVar(castLhs->getValue());
+                inst = mTable.get(castLhs->getValue());
             }
             else // if(binLhs->getType() == Declaration)
             {
-                llvm::Value *exp = GenerateExpression(binLhs);
+                llvm::Value *exp = generateExpression(binLhs);
                 inst = exp;
             }
             return mBuilder.CreateStore(rhs, inst);
         }
 
-        llvm::Value *lhs = GenerateExpression(expression->getLhs());
+        llvm::Value *lhs = generateExpression(expression->getLhs());
 
         if (lhs->getType() == llvm::Type::getDoubleTy(mContext) || rhs->getType() == llvm::Type::getDoubleTy(mContext))
         {
-            return GenerateFloatingPointMath(op, lhs, rhs);
+            return generateFloatingPointMath(op, lhs, rhs);
         }
         else if (lhs->getType() == llvm::Type::getInt32Ty(mContext) && rhs->getType() == llvm::Type::getInt32Ty(mContext))
         {
-            return GenerateIntegerMath(op, lhs, rhs);
+            return generateIntegerMath(op, lhs, rhs);
         }
         else
         {
@@ -253,7 +192,7 @@ namespace codegen
 
     }
 
-    llvm::Value *CodeGen::GenerateIntegerMath(string op, llvm::Value *lhs, llvm::Value *rhs)
+    llvm::Value *CodeGen::generateIntegerMath(string op, llvm::Value *lhs, llvm::Value *rhs)
     {
         ASSERT(lhs->getType() == llvm::Type::getInt32Ty(mContext));
         ASSERT(rhs->getType() == llvm::Type::getInt32Ty(mContext));
@@ -304,7 +243,7 @@ namespace codegen
         }
     }
 
-    llvm::Value *CodeGen::GenerateFloatingPointMath(string op, llvm::Value *lhs, llvm::Value *rhs)
+    llvm::Value *CodeGen::generateFloatingPointMath(string op, llvm::Value *lhs, llvm::Value *rhs)
     {
         ASSERT(lhs->getType() == llvm::Type::getInt32Ty(mContext) || lhs->getType() == llvm::Type::getDoubleTy(mContext));
         ASSERT(rhs->getType() == llvm::Type::getInt32Ty(mContext) || rhs->getType() == llvm::Type::getDoubleTy(mContext));
@@ -366,17 +305,17 @@ namespace codegen
         }
     }
 
-    llvm::Value *CodeGen::GenerateFunctionCall(shared_ptr<FunctionCallNode> expression)
+    llvm::Value *CodeGen::generateFunctionCall(shared_ptr<FunctionCallNode> expression)
     {
         shared_ptr<FunctionCallNode> call = dynamic_pointer_cast<FunctionCallNode>(expression);
 
-        llvm::Function *func = mTable.getFunc(call->getName());
+        llvm::Function *func = getFunc(call->getName());
 
         vector<llvm::Value *> args;
         for (size_t i = 0; i < call->argCount(); ++i)
         {
             shared_ptr<Expression> argNode = dynamic_pointer_cast<Expression>(call->getArgs()[i]);
-            llvm::Value *arg = GenerateExpression(argNode);
+            llvm::Value *arg = generateExpression(argNode);
 
             args.push_back(arg);
         }
@@ -384,7 +323,7 @@ namespace codegen
         return mBuilder.CreateCall(func, args);
     }
 
-    llvm::Value *CodeGen::GenerateExpression(shared_ptr<Expression> expression)
+    llvm::Value *CodeGen::generateExpression(shared_ptr<Expression> expression)
     {
         switch (expression->getExpressionType())
         {
@@ -410,12 +349,12 @@ namespace codegen
         case ExpressionType::BinaryOperator:
         {
             shared_ptr<BinaryExpressionNode> ben = dynamic_pointer_cast<BinaryExpressionNode>(expression);
-            return GenerateBinaryExpression(ben);
+            return generateBinaryExpression(ben);
         }
         case ExpressionType::Identifier:
         {
             shared_ptr<IdentifierNode> var = dynamic_pointer_cast<IdentifierNode>(expression);
-            llvm::AllocaInst *inst = mTable.getVar(var->getValue());
+            llvm::AllocaInst *inst = mTable.get(var->getValue());
 
             return mBuilder.CreateLoad(inst);
         }
@@ -427,13 +366,13 @@ namespace codegen
             llvm::Type *type = stringToType(decl->getTypeName());
 
             llvm::AllocaInst *inst = mBuilder.CreateAlloca(type, 0, decl->getName());
-            mTable.putVar(decl->getName(), inst);
+            mTable.put(decl->getName(), inst);
             return inst;
         }
         case ExpressionType::Return:
         {
             shared_ptr<ReturnNode> ret = dynamic_pointer_cast<ReturnNode>(expression);
-            llvm::Value *exp = GenerateExpression(ret->getExpression());
+            llvm::Value *exp = generateExpression(ret->getExpression());
 
             return mBuilder.CreateRet(exp);
         }
@@ -441,7 +380,7 @@ namespace codegen
         {
             shared_ptr<CastNode> cast = dynamic_pointer_cast<CastNode>(expression);
             
-            llvm::Value *exp = GenerateExpression(cast->getExpression());
+            llvm::Value *exp = generateExpression(cast->getExpression());
             llvm::Type *type = stringToType(cast->getCastType());
 
             // TODO: a more generic casting mechanism
@@ -461,16 +400,20 @@ namespace codegen
         case ExpressionType::FunctionCall:
         {
             shared_ptr<FunctionCallNode> fcn = dynamic_pointer_cast<FunctionCallNode>(expression);
-            return GenerateFunctionCall(fcn);
+            return generateFunctionCall(fcn);
         }
         case ExpressionType::Empty:
             return nullptr;
+        case ExpressionType::If:
+            throw "if not implemented";
+        case ExpressionType::While:
+            throw "while not implemented";    
         default:
             throw "Unknown expression type in codegen";
         }
     }
 
-    llvm::Value *CodeGen::GenerateBlock(shared_ptr<BlockNode> block, llvm::Function * llvmFunc)
+    llvm::Value *CodeGen::generateBlock(shared_ptr<BlockNode> block, llvm::Function * llvmFunc)
     {
         mTable.enterContext();
 
@@ -490,14 +433,14 @@ namespace codegen
         for (auto it = expressions.begin(); it != expressions.end(); ++it)
         {
             shared_ptr<Expression> exp = *it;
-            GenerateExpression(exp);
+            generateExpression(exp);
         }
 
         mTable.leaveContext();
         return basicBlock;
     }
 
-    void CodeGen::Generate()
+    void CodeGen::generate()
     {
         shared_ptr<Assembly> assembly = mTree;
 
@@ -520,7 +463,7 @@ namespace codegen
 
         mFpm->doInitialization();
         
-        GenerateAssembly(assembly);
+        generateAssembly(assembly);
         mModule->print(llvm::errs(), nullptr);
         llvm::verifyModule(*mModule);
 
@@ -533,7 +476,7 @@ namespace codegen
         }
     }
 
-    void CodeGen::RunJit()
+    void CodeGen::runJit()
     {
         if (mMain == nullptr)
         {
@@ -567,7 +510,7 @@ namespace codegen
         llvm::llvm_shutdown();
     }
 
-    void CodeGen::FreeResources()
+    void CodeGen::freeResources()
     {
         if (mModule)
         {

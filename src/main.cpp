@@ -105,15 +105,15 @@ int main(int argc, char **argv)
     }
 
     CodeGen gen(node, out);
-    gen.Generate();
+    gen.generate();
 
     if (opt.runJit)
     {
         cout << "running as JIT" << endl;
-        gen.RunJit();
+        gen.runJit();
     }
 
-    gen.FreeResources();
+    gen.freeResources();
     
     return 0;
 }
