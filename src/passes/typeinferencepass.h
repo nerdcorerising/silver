@@ -6,10 +6,10 @@
 #include <string>
 
 #include "common.h"
-#include "optimizationpass.h"
+#include "analysispass.h"
 #include "ast/ast.h"
 
-namespace optimization
+namespace analysis
 {
     class TypeInferencePass : public Pass
     {

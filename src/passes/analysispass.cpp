@@ -1,14 +1,14 @@
 
-#include "optimizationpass.h"
+#include "analysispass.h"
 #include "hoistdeclarationpass.h"
 #include "typeinferencepass.h"
 
 using namespace std;
 using namespace ast;
 
-namespace optimization
+namespace analysis
 {    
-    OptimizationPassManager::OptimizationPassManager(BuildType type) :
+    AnalysisPassManager::AnalysisPassManager(BuildType type) :
         mPasses()
     {
         mPasses.push_back(shared_ptr<Pass>(new HoistDeclarationPass()));
@@ -24,7 +24,7 @@ namespace optimization
         }
     }
 
-    void OptimizationPassManager::performPassOnBlock(shared_ptr<BlockNode> block, SymbolTable<string, string> &symbols)
+    void AnalysisPassManager::performPassOnBlock(shared_ptr<BlockNode> block, SymbolTable<string, string> &symbols)
     {
         symbols.enterContext();
 
@@ -74,7 +74,7 @@ namespace optimization
         symbols.leaveContext();
     }
 
-    void OptimizationPassManager::defineFunctions(std::shared_ptr<Assembly> assembly, SymbolTable<std::string, std::string> &symbols)
+    void AnalysisPassManager::defineFunctions(std::shared_ptr<Assembly> assembly, SymbolTable<std::string, std::string> &symbols)
     {
         vector<shared_ptr<Function>> functions = assembly->getFunctions();
         for (auto func = functions.begin(); func != functions.end(); ++func)
@@ -84,7 +84,7 @@ namespace optimization
         }   
     }
 
-    void OptimizationPassManager::performPasses(shared_ptr<Assembly> assembly)
+    void AnalysisPassManager::performPasses(shared_ptr<Assembly> assembly)
     {
         SymbolTable<string, string> symbols;
         defineFunctions(assembly, symbols);

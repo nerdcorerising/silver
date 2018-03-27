@@ -5,7 +5,7 @@
 using namespace std;
 using namespace ast;
 
-namespace optimization
+namespace analysis
 {
     string TypeInferencePass::getTypeForExpression(shared_ptr<Expression> expression, SymbolTable<string, string> &symbols)
     {

@@ -6,11 +6,11 @@
 
 #include "parser/tokenizer.h"
 #include "parser/parser.h"
-#include "passes/optimizationpass.h"
+#include "passes/analysispass.h"
 #include "codegen/codegen.h"
 
 using namespace std;
-using namespace optimization;
+using namespace analysis;
 using namespace codegen;
 
 void waitForKey();
@@ -95,8 +95,8 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    OptimizationPassManager optimizations(opt.buildType);
-    optimizations.performPasses(node);
+    AnalysisPassManager analysis(opt.buildType);
+    analysis.performPasses(node);
 
     string out = "";
     if (opt.genByteCode)

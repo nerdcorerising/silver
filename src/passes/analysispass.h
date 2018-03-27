@@ -12,11 +12,9 @@
 
 // Also need to make a fill out symbol table pass
 
-namespace optimization
+namespace analysis
 {
     // TODO passes
-    // Change DeclarationNode with expression to declaration and then assignment
-    // Type inference pass
     // Type checking pass (assignments, function calls, etc)
     // Maybe ARC pass? Probably ARC pass!
 
@@ -35,7 +33,7 @@ namespace optimization
         virtual void performPass(std::shared_ptr<ast::BlockNode> block, SymbolTable<std::string, std::string> &symbols) = 0;
     };
 
-    class OptimizationPassManager
+    class AnalysisPassManager
     {
     private:
         std::vector<std::shared_ptr<Pass>> mPasses;
@@ -44,7 +42,7 @@ namespace optimization
         void defineFunctions(std::shared_ptr<ast::Assembly> assembly, SymbolTable<std::string, std::string> &symbols);
 
     public:
-        OptimizationPassManager(BuildType type);
+        AnalysisPassManager(BuildType type);
 
         void performPasses(std::shared_ptr<ast::Assembly> assembly);
     };

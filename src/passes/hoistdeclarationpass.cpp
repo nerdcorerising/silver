@@ -4,7 +4,7 @@
 using namespace std;
 using namespace ast;
 
-namespace optimization
+namespace analysis
 {
     void HoistDeclarationPass::performPass(shared_ptr<BlockNode> block, SymbolTable<string, string> &symbols)
     {
