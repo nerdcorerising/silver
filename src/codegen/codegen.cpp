@@ -323,6 +323,36 @@ namespace codegen
         return mBuilder.CreateCall(func, args);
     }
 
+    void CodeGen::generateIf(std::shared_ptr<ast::IfNode> ifNode)
+    {
+        throw "not implemented";
+    }
+
+    void CodeGen::generateWhile(std::shared_ptr<ast::WhileNode> whileNode)
+    {
+        llvm::BasicBlock *preHeaderBlock = mBuilder.GetInsertBlock();
+        llvm::Function *function = preHeaderBlock->getParent();
+        llvm::BasicBlock *entry = llvm::BasicBlock::Create(mContext, "entry", function);
+        llvm::BasicBlock *condition = llvm::BasicBlock::Create(mContext, "condition", function);
+        llvm::BasicBlock *body = llvm::BasicBlock::Create(mContext, "body", function);
+        llvm::BasicBlock *end = llvm::BasicBlock::Create(mContext, "end", function);
+
+        mBuilder.SetInsertPoint(preHeaderBlock);
+        mBuilder.CreateBr(entry);
+
+        mBuilder.SetInsertPoint(entry);
+        mBuilder.CreateBr(condition);
+
+        generateIntoBlock(body, whileNode->getBlock());
+        mBuilder.CreateBr(entry);
+
+        mBuilder.SetInsertPoint(condition);
+        llvm::Value *cmp = generateExpression(whileNode->getCondition());
+        mBuilder.CreateCondBr(cmp, body, end);
+
+        mBuilder.SetInsertPoint(end);
+    }
+
     llvm::Value *CodeGen::generateExpression(shared_ptr<Expression> expression)
     {
         switch (expression->getExpressionType())
@@ -405,9 +435,21 @@ namespace codegen
         case ExpressionType::Empty:
             return nullptr;
         case ExpressionType::If:
-            throw "if not implemented";
+        {
+            shared_ptr<IfNode> ifNode = dynamic_pointer_cast<IfNode>(expression);
+            generateIf(ifNode);
+            // TODO: should refactor so this doesn't get called
+            return nullptr;
+        }
+        break;
         case ExpressionType::While:
-            throw "while not implemented";    
+        {
+            shared_ptr<WhileNode> whileNode = dynamic_pointer_cast<WhileNode>(expression);
+            generateWhile(whileNode);
+            // TODO: should refactor so this doesn't get called
+            return nullptr;
+        }
+        break;
         default:
             throw "Unknown expression type in codegen";
         }
@@ -415,8 +457,6 @@ namespace codegen
 
     llvm::Value *CodeGen::generateBlock(shared_ptr<BlockNode> block, llvm::Function * llvmFunc)
     {
-        mTable.enterContext();
-
         llvm::BasicBlock *basicBlock;
         if (llvmFunc->getBasicBlockList().size() == 0)
         {
@@ -426,6 +466,13 @@ namespace codegen
         {
             basicBlock = &llvmFunc->getBasicBlockList().front();
         }
+
+        return generateIntoBlock(basicBlock, block);
+    }
+
+    llvm::Value *CodeGen::generateIntoBlock(llvm::BasicBlock *basicBlock, shared_ptr<BlockNode> block)
+    {
+        mTable.enterContext();
 
         mBuilder.SetInsertPoint(basicBlock);
 
@@ -438,6 +485,7 @@ namespace codegen
 
         mTable.leaveContext();
         return basicBlock;
+
     }
 
     void CodeGen::generate()

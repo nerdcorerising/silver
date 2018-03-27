@@ -68,7 +68,10 @@ namespace codegen
         llvm::Value *generateIntegerMath(std::string op, llvm::Value *lhs, llvm::Value *rhs);
         llvm::Value *generateFloatingPointMath(std::string op, llvm::Value *lhs, llvm::Value *rhs);
         llvm::Value *generateFunctionCall(std::shared_ptr<ast::FunctionCallNode> expression);
+        void generateIf(std::shared_ptr<ast::IfNode> ifNode);
+        void generateWhile(std::shared_ptr<ast::WhileNode> whileNode);
         llvm::Value *generateBlock(std::shared_ptr<ast::BlockNode> block, llvm::Function * llvmFunc);
+        llvm::Value *generateIntoBlock(llvm::BasicBlock *basicBlock, std::shared_ptr<ast::BlockNode> block);
     public:
         CodeGen(std::shared_ptr<ast::Assembly> tree, std::string outFile="");
 
