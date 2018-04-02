@@ -5,6 +5,7 @@ fn main() -> int {
     x = function(-3);
     let z = function(0);
     let p = functionWhile();
+    let p: string;
 
     return x + y + z + p;
 }

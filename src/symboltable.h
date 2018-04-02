@@ -23,12 +23,12 @@ public:
         mCurrent.insert({name, inst});
     }
 
-    value get(key name)
+    bool tryGet(key name, value &out)
     {
+        bool found = false;
         auto it = mCurrent.find(name);
         if (it == mCurrent.end())
         {
-            bool found = false;
             for (auto revIt = mStack.rbegin(); revIt != mStack.rend(); ++revIt)
             {
                 it = (*revIt).find(name);
@@ -38,17 +38,40 @@ public:
                     break;
                 }
             }
-
-            if (!found)
-            {
-                throw "uh oh!";
-                // return value();
-            }
+        }
+        else
+        {
+            found = true;
         }
 
-        return (*it).second;
+        if (found)
+        {
+            out = it->second;
+        }
+        else
+        {
+            out = value();
+        }
+
+        return found;
     }
 
+    value get(key name)
+    {
+        value v;
+        if (!tryGet(name, v))
+        {
+            throw "uh oh!";
+        }
+
+        return v;
+    }
+
+    bool contains(key name)
+    {
+        value v;
+        return tryGet(name, v);
+    }
 
     void enterContext()
     {
