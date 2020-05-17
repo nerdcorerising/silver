@@ -11,14 +11,15 @@ using namespace ast;
 namespace codegen
 {
     CodeGen::CodeGen(shared_ptr<Assembly> tree, string outFile) :
-        mTree(tree),
         mOutFile(outFile),
+        mTree(tree),
         mTable(),
         mFunctions(),
         mContext(),
-        mModule(),
+        mModule(nullptr),
+        mMain(nullptr),
         mBuilder(mContext),
-        mFpm()
+        mFpm(nullptr)
     {
 
     }
@@ -81,7 +82,7 @@ namespace codegen
     void CodeGen::generateAssembly(shared_ptr<Assembly> assembly)
     {
         vector<shared_ptr<Function>> functions = assembly->getFunctions();
-        
+
         for (auto it = functions.begin(); it != functions.end(); ++it)
         {
             shared_ptr<Function> function = *it;
@@ -196,7 +197,7 @@ namespace codegen
     {
         ASSERT(lhs->getType() == llvm::Type::getInt32Ty(mContext));
         ASSERT(rhs->getType() == llvm::Type::getInt32Ty(mContext));
-        
+
         if (op == "+")
         {
             return mBuilder.CreateAdd(lhs, rhs);
@@ -358,10 +359,10 @@ namespace codegen
             ++pos;
             next = ifs.size() > pos ? ifs[pos] : nullptr;
         }
-        
+
         mBuilder.SetInsertPoint(currentConditionBlock);
         cmp = generateExpression(current->getCondition());
-        
+
         generateIntoBlock(currentBodyBlock, current->getBlock());
 
         shared_ptr<BlockNode> elseBlock = ifNode->getElseBlock();
@@ -406,7 +407,7 @@ namespace codegen
 
     }
 
-    void CodeGen::generateWhile(std::shared_ptr<ast::WhileNode> whileNode)
+    void CodeGen::generateWhile(shared_ptr<ast::WhileNode> whileNode)
     {
         llvm::BasicBlock *preHeaderBlock = mBuilder.GetInsertBlock();
         llvm::Function *function = preHeaderBlock->getParent();
@@ -487,7 +488,7 @@ namespace codegen
         case ExpressionType::Cast:
         {
             shared_ptr<CastNode> cast = dynamic_pointer_cast<CastNode>(expression);
-            
+
             llvm::Value *exp = generateExpression(cast->getExpression());
             llvm::Type *type = stringToType(cast->getCastType());
 
@@ -588,7 +589,7 @@ namespace codegen
         mFpm->add(llvm::createCFGSimplificationPass());
 
         mFpm->doInitialization();
-        
+
         generateAssembly(assembly);
         mModule->print(llvm::errs(), nullptr);
         llvm::verifyModule(*mModule);
@@ -612,7 +613,7 @@ namespace codegen
 
         llvm::ExecutionEngine *EE = llvm::EngineBuilder(unique_ptr<llvm::Module>(mModule)).create();
         mModule = nullptr; // now owned by unique_ptr above;
-        
+
         cout << "calling main()" << endl;
         // Call the main function with no arguments:
         vector<llvm::GenericValue> noargs;

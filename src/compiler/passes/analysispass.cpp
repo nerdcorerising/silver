@@ -2,6 +2,7 @@
 #include "analysispass.h"
 #include "hoistdeclarationpass.h"
 #include "typeinferencepass.h"
+#include "referencecounting.h"
 
 using namespace std;
 using namespace ast;
@@ -13,6 +14,7 @@ namespace analysis
     {
         mPasses.push_back(shared_ptr<Pass>(new HoistDeclarationPass()));
         mPasses.push_back(shared_ptr<Pass>(new TypeInferencePass()));
+        mPasses.push_back(shared_ptr<Pass>(new ReferenceCountingPass()));
 
         if (type == BuildType::Debug)
         {
@@ -74,7 +76,7 @@ namespace analysis
         symbols.leaveContext();
     }
 
-    void AnalysisPassManager::defineFunctions(std::shared_ptr<Assembly> assembly, SymbolTable<std::string, std::string> &symbols)
+    void AnalysisPassManager::defineFunctions(shared_ptr<Assembly> assembly, SymbolTable<string, string> &symbols)
     {
         vector<shared_ptr<Function>> functions = assembly->getFunctions();
         for (auto func = functions.begin(); func != functions.end(); ++func)

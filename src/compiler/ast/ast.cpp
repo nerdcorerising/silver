@@ -491,7 +491,7 @@ namespace ast
         mBlock->prettyPrint(out, indent + 1);
     }
 
-    IfBlockNode::IfBlockNode(std::vector<shared_ptr<IfNode>> ifs, shared_ptr<BlockNode> elseBlock) :
+    IfBlockNode::IfBlockNode(vector<shared_ptr<IfNode>> ifs, shared_ptr<BlockNode> elseBlock) :
         mIfs(ifs),
         mElseBlock(elseBlock)
     {

@@ -35,7 +35,7 @@
 #include "parser/parser.h"
 #include "symboltable.h"
 
-// TODO: need to use the new generic symbol table, and switch the function part of the symbol table to 
+// TODO: need to use the new generic symbol table, and switch the function part of the symbol table to
 // use the map instead
 
 namespace codegen

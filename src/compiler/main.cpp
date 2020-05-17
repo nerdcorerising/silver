@@ -77,7 +77,20 @@ int main(int argc, char **argv)
 
     filebuf fb;
     shared_ptr<ast::Assembly> node;
-    if (fb.open("sampleinput.txt", ios::in))
+
+    const char *file;
+    if (argc <= 1)
+    {
+        file = "sampleinput.txt";
+        cout << "No input file provided, using " << file << endl;
+    }
+    else
+    {
+        file = argv[1];
+        cout << "Compiling file " << file << endl;
+    }
+
+    if (fb.open(file, ios::in))
     {
         istream input(&fb);
 
@@ -120,6 +133,6 @@ int main(int argc, char **argv)
 
 void waitForKey()
 {
-    std::cout << std::endl << "press any key to exit;";
-    std::cin.ignore(std::numeric_limits <std::streamsize> ::max(), '\n');
+    cout << endl << "press any key to exit;";
+    cin.ignore(numeric_limits <streamsize> ::max(), '\n');
 }
