@@ -6,7 +6,12 @@ fn main() -> int {
     let z = function(0);
     let p = functionWhile();
 
-    return x + y + z + p;
+    if ((x + y + z + p) == 13)
+    {
+        return 50;
+    }
+
+    return 100;
 }
 
 fn function(a: int) -> int {

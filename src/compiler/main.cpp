@@ -120,12 +120,8 @@ int main(int argc, char **argv)
     CodeGen gen(node, out);
     gen.generate();
 
-    int result = -1;
-    if (opt.runJit)
-    {
-        cout << "running as JIT" << endl;
-        result = gen.runJit();
-    }
+    cout << "running as JIT" << endl;
+    int result = gen.runJit();
 
     gen.freeResources();
 

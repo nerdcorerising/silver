@@ -12,8 +12,8 @@ using namespace std;
 namespace tok
 {
     Tokenizer::Tokenizer(void) :
-        mOperators({ "+", "++", "-", "--", "*", "/", "%", "=", "<", ">", "==", ">=", "<=", "->" }),
-        mKeywords({ "if", "elif", "else", "for", "while", "module", "return", "fn", "let" }),
+        mOperators({ "+", "++", "-", "--", "*", "/", "%", "=", "!=", "<", ">", "==", ">=", "<=", "->" }),
+        mKeywords({ "if", "elif", "else", "for", "while", "module", "return", "fn", "let", "import" }),
         mSpecialtokens({ '[', ']', '{', '}', '(', ')', ',', ';', ':' }),
         mBuffer(),
         mState(BufferState::EmptyState),

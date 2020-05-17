@@ -141,7 +141,7 @@ namespace tok
                 return false;
             }
 
-            for (unsigned int i = 0; i < left.size(); ++i)
+            for (unsigned int i = 0; i < right.size(); ++i)
             {
                 if (left[i] != right[i])
                 {

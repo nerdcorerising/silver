@@ -3,6 +3,9 @@
 #include "parser.h"
 
 #include <stack>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 
 using namespace std;
 using namespace tok;
@@ -21,12 +24,12 @@ namespace parse
     {
         expectTokenType(current(), type, message);
     }
-    
+
     void Parser::expectCurrentTokenText(string text, string message)
     {
         expectTokenText(current(), text, message);
     }
-    
+
     void Parser::expectCurrentTokenTypeAndText(TokenType type, string text, string message)
     {
         expectCurrentTokenType(type, message);
@@ -40,7 +43,7 @@ namespace parse
             PARSE_ERROR(message);
         }
     }
-    
+
     void Parser::expectTokenText(Token token, string text, string message)
     {
         if (token.text() != text)
@@ -48,7 +51,7 @@ namespace parse
             PARSE_ERROR(message);
         }
     }
-    
+
     void Parser::expectTokenTypeAndText(Token token, TokenType type, string text, string message)
     {
         expectTokenType(token, type, message);
@@ -142,6 +145,41 @@ namespace parse
         return args;
     }
 
+    vector<shared_ptr<Function>> Parser::parseImport()
+    {
+        // TODO: better search, user defined imports
+        expectCurrentTokenTypeAndText(TokenType::Keyword, "import", "Missing import keyword");
+        advance();
+
+        expectCurrentTokenType(TokenType::Identifier, "Invalid import name.");
+        filesystem::path fileName = filesystem::path(current().text() + ".sl");
+        advance();
+
+        expectCurrentTokenType(TokenType::SemiColon, "Expected semicolon after import.");
+        advance();
+
+        filebuf fb;
+        // Now we know what they're trying to import, let's find it and parse it
+        if (!filesystem::exists(fileName))
+        {
+            fileName = filesystem::path("framework") / fileName;
+        }
+
+        if (fb.open(fileName.string().c_str(), ios::in))
+        {
+            istream input = istream(&fb);
+
+            Tokenizer tok;
+            Parser parser(fileName.string(), tok, input);
+            shared_ptr<ast::Assembly> importAssembly = parser.parse();
+            return importAssembly->getFunctions();
+        }
+        else
+        {
+            PARSE_ERROR("Could not find import file " + fileName.string());
+        }
+    }
+
     shared_ptr<Function> Parser::parseFunction()
     {
         expectCurrentTokenTypeAndText(TokenType::Keyword, "fn", "Missing function keyword");
@@ -186,7 +224,7 @@ namespace parse
         }
 
         advance();
-        
+
         return shared_ptr<BlockNode>(new BlockNode(expressions));
     }
 
@@ -238,7 +276,7 @@ namespace parse
         {
             advance();
 
-            if (current().type() == TokenType::Identifier 
+            if (current().type() == TokenType::Identifier
                 && lookAhead().type() == TokenType::CloseParens)
             {
                 string type = current().text();
@@ -301,7 +339,7 @@ namespace parse
         {
             return 0;
         }
-        else if (opStr == "<" || opStr == ">" || opStr == "==" || opStr == ">=" || opStr == "<=")
+        else if (opStr == "<" || opStr == ">" || opStr == "==" || opStr == "!=" || opStr == ">=" || opStr == "<=")
         {
             return 1;
         }
@@ -419,7 +457,7 @@ namespace parse
     }
 
     shared_ptr<Expression> Parser::parseIfWhileCondition()
-    {        
+    {
         expectCurrentTokenType(TokenType::OpenParens, "Missing open parentheses for if statement");
         advance();
 
@@ -467,7 +505,8 @@ namespace parse
             ifs.push_back(elseIfNode);
         }
 
-        shared_ptr<BlockNode> elseBlock;
+        // Codegen relies on there being a block for the else node, even if it's empty
+        shared_ptr<BlockNode> elseBlock(new BlockNode(vector<shared_ptr<Expression>>()));
         if (current().type() == TokenType::Keyword && current().text() == "else")
         {
             advance();
@@ -489,7 +528,7 @@ namespace parse
 
         string name = current().text();
         advance();
-        
+
         shared_ptr<Expression> expression;
         string type;
 
@@ -521,8 +560,16 @@ namespace parse
 
         while (mTokens.hasInput())
         {
-            shared_ptr<Function> function = parseFunction();
-            functions.push_back(function);
+            if (current().type() == TokenType::Keyword && current().text() == "import")
+            {
+                vector<shared_ptr<Function>> expressions = parseImport();
+                functions.insert(functions.end(), expressions.begin(), expressions.end());
+            }
+            else
+            {
+                shared_ptr<Function> function = parseFunction();
+                functions.push_back(function);
+            }
         }
 
         return shared_ptr<Assembly>(new Assembly(mName, functions));

@@ -52,7 +52,10 @@ namespace analysis
                 }
 
                 subBlock = ifNode->getElseBlock();
-                performPassOnBlock(subBlock, symbols);
+                if (subBlock != nullptr)
+                {
+                    performPassOnBlock(subBlock, symbols);
+                }
             }
             break;
             case ExpressionType::While:

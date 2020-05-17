@@ -34,8 +34,8 @@ namespace codegen
         auto it = mFunctions.find(name);
         if (it == mFunctions.end())
         {
-            throw "uh oh!";
-            return nullptr;
+            llvm::Function* llvmFunc = llvm::cast<llvm::Function>(mModule->getFunction(name));
+            return llvmFunc;
         }
 
         return (*it).second;
@@ -230,6 +230,10 @@ namespace codegen
         {
             return mBuilder.CreateICmpEQ(lhs, rhs);
         }
+        else if (op == "!=")
+        {
+            return mBuilder.CreateICmpNE(lhs, rhs);
+        }
         else if (op == ">=")
         {
             return mBuilder.CreateICmpSGE(lhs, rhs);
@@ -291,6 +295,10 @@ namespace codegen
         else if (op == "==")
         {
             return mBuilder.CreateFCmpOEQ(lhs, rhs);
+        }
+        else if (op == "!=")
+        {
+            return mBuilder.CreateFCmpONE(lhs, rhs);
         }
         else if (op == ">=")
         {
@@ -385,26 +393,25 @@ namespace codegen
             mBuilder.CreateCondBr(cmp, currentBodyBlock, end);
         }
 
-        bool didNotTerminateAny = true;
+        bool terminated = false;
         for (auto it = bodyBlocks.begin(); it != bodyBlocks.end(); ++it)
         {
             if ((*it)->getTerminator() == nullptr)
             {
                 mBuilder.SetInsertPoint(*it);
                 mBuilder.CreateBr(end);
-                didNotTerminateAny = false;
+                terminated = true;
             }
         }
 
-        if (didNotTerminateAny)
-        {
-            end->eraseFromParent();
-        }
-        else
+        if (terminated)
         {
             mBuilder.SetInsertPoint(end);
         }
-
+        else
+        {
+            end->eraseFromParent();
+        }
     }
 
     void CodeGen::generateWhile(shared_ptr<ast::WhileNode> whileNode)

@@ -21,6 +21,7 @@ namespace parse
         std::string mName;
 
         std::vector<std::shared_ptr<ast::Argument>> parseArgumentsForDeclaration();
+        std::vector<std::shared_ptr<ast::Function>> parseImport();
         std::shared_ptr<ast::Function> parseFunction();
         std::shared_ptr<ast::BlockNode> parseBlock();
 
