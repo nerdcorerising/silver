@@ -78,53 +78,57 @@ int main(int argc, char **argv)
     filebuf fb;
     shared_ptr<ast::Assembly> node;
 
-    const char *file;
     if (argc <= 1)
     {
-        file = "sampleinput.txt";
-        cout << "No input file provided, using " << file << endl;
-    }
-    else
-    {
-        file = argv[1];
-        cout << "Compiling file " << file << endl;
-    }
-
-    if (fb.open(file, ios::in))
-    {
-        istream input(&fb);
-
-        tok::Tokenizer tok;
-        parse::Parser parser("sample", tok, input);
-
-        node = parser.parse();
-        node->prettyPrint(cout);
-        fb.close();
-    }
-    else
-    {
-        cerr << "Failed to open input file." << endl;
-        waitForKey();
+        cout << "No input file provided! " << endl;
         return -1;
     }
 
-    AnalysisPassManager analysis(opt.buildType);
-    analysis.performPasses(node);
-
-    string out = "";
-    if (opt.genByteCode)
+    const char *file = argv[1];
+    cout << "Compiling file " << file << endl;
+    int result = -1;
+    try
     {
-        out = "sampleoutput.bc";
+        if (fb.open(file, ios::in))
+        {
+            istream input(&fb);
+
+            tok::Tokenizer tok;
+            parse::Parser parser("sample", tok, input);
+
+            node = parser.parse();
+            node->prettyPrint(cout);
+            fb.close();
+        }
+        else
+        {
+            cerr << "Failed to open input file." << endl;
+            waitForKey();
+            return -1;
+        }
+
+        AnalysisPassManager analysis(opt.buildType);
+        analysis.performPasses(node);
+
+        string out = "";
+        if (opt.genByteCode)
+        {
+            out = "sampleoutput.bc";
+        }
+
+        CodeGen gen(node, out);
+        gen.generate();
+
+        cout << "running as JIT" << endl;
+        result = gen.runJit();
+
+        gen.freeResources();
     }
-
-    CodeGen gen(node, out);
-    gen.generate();
-
-    cout << "running as JIT" << endl;
-    int result = gen.runJit();
-
-    gen.freeResources();
-
+    catch (string message)
+    {
+        // TODO: better error handling
+        printf("Caught message=\"%s\" during compilation\n", message.c_str());
+    }
     return result;
 }
 

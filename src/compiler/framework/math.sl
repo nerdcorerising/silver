@@ -1,6 +1,6 @@
 
 fn min(lhs: int, rhs: int) -> int {
-    if (lhs > rhs)
+    if (lhs < rhs)
     {
         return lhs;
     }
@@ -9,7 +9,7 @@ fn min(lhs: int, rhs: int) -> int {
 }
 
 fn max(lhs: int, rhs: int) -> int {
-    if (lhs < rhs)
+    if (lhs > rhs)
     {
         return lhs;
     }

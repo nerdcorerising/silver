@@ -2,6 +2,8 @@
 
 #include "codegen.h"
 
+#include <string>
+
 
 using namespace std;
 using namespace ast;
@@ -24,6 +26,13 @@ namespace codegen
 
     }
 
+
+    void CodeGen::reportFatalError(string message)
+    {
+        fprintf(stderr, "Error during codegen phase: %s\n", message.c_str());
+        throw message;
+    }
+
     void CodeGen::putFunc(string name, llvm::Function *func)
     {
         mFunctions.insert({name, func});
@@ -34,8 +43,7 @@ namespace codegen
         auto it = mFunctions.find(name);
         if (it == mFunctions.end())
         {
-            llvm::Function* llvmFunc = llvm::cast<llvm::Function>(mModule->getFunction(name));
-            return llvmFunc;
+            return nullptr;
         }
 
         return (*it).second;
@@ -61,7 +69,8 @@ namespace codegen
         }
         else
         {
-            throw "not implemented";
+            reportFatalError("not implemented");
+            return nullptr;
         }
     }
 
@@ -109,7 +118,8 @@ namespace codegen
         {
             if (mMain != nullptr)
             {
-                throw "Multiple entry points defined.";
+                reportFatalError("Multiple entry points defined.");
+                return nullptr;
             }
 
             mMain = llvmFunc;
@@ -122,6 +132,12 @@ namespace codegen
     {
         mTable.enterContext();
         llvm::Function *llvmFunc = getFunc(function->getName());
+        if (llvmFunc == nullptr)
+        {
+            reportFatalError("Undefined function " + function->getName() + " referenced");
+            return nullptr;
+        }
+
         llvm::BasicBlock::Create(mContext, "entry", llvmFunc, 0);
 
         //for (size_t i = 0; i < function->argCount(); ++i)
@@ -156,10 +172,17 @@ namespace codegen
         {
             shared_ptr<Expression> binLhs = expression->getLhs();
 
-            if (binLhs == nullptr || (binLhs->getExpressionType() != Identifier && binLhs->getExpressionType() != Declaration))
+            if (binLhs == nullptr)
             {
                 // only can store to variable.
-                throw "invalid, need to decide what to do for error stuff.";
+                reportFatalError("Found a store with a null assignment");
+                return nullptr;
+            }
+
+            if (binLhs->getExpressionType() != Identifier && binLhs->getExpressionType() != Declaration)
+            {
+                reportFatalError("Cannot assign a value to a non-identifier type.");
+                return nullptr;
             }
 
             llvm::Value *inst;
@@ -173,6 +196,7 @@ namespace codegen
                 llvm::Value *exp = generateExpression(binLhs);
                 inst = exp;
             }
+
             return mBuilder.CreateStore(rhs, inst);
         }
 
@@ -188,7 +212,8 @@ namespace codegen
         }
         else
         {
-            throw "need to support strings and such here eventually";
+            reportFatalError("need to support strings and such here eventually");
+            return nullptr;
         }
 
     }
@@ -244,7 +269,8 @@ namespace codegen
         }
         else
         {
-            throw "unknown operator";
+            reportFatalError("unknown operator");
+            return nullptr;
         }
     }
 
@@ -310,7 +336,8 @@ namespace codegen
         }
         else
         {
-            throw "unknown operator";
+            reportFatalError("unknown operator");
+            return nullptr;
         }
     }
 
@@ -319,6 +346,11 @@ namespace codegen
         shared_ptr<FunctionCallNode> call = dynamic_pointer_cast<FunctionCallNode>(expression);
 
         llvm::Function *func = getFunc(call->getName());
+        if (func == nullptr)
+        {
+            reportFatalError("Function " + call->getName() + " is not defined.");
+            return nullptr;
+        }
 
         vector<llvm::Value *> args;
         for (size_t i = 0; i < call->argCount(); ++i)
@@ -460,7 +492,8 @@ namespace codegen
         }
         case ExpressionType::UnaryOperator:
         {
-            throw "not implemented";
+            reportFatalError("not implemented");
+            return nullptr;
         }
         case ExpressionType::BinaryOperator:
         {
@@ -510,7 +543,8 @@ namespace codegen
             }
             else
             {
-                throw "unsupported cast";
+                reportFatalError("unsupported cast");
+                return nullptr;
             }
         }
         case ExpressionType::FunctionCall:
@@ -537,7 +571,10 @@ namespace codegen
         }
         break;
         default:
-            throw "Unknown expression type in codegen";
+        {
+            reportFatalError("Unknown expression type in codegen");
+            return nullptr;
+        }
         }
     }
 
@@ -634,7 +671,7 @@ namespace codegen
         }
         else
         {
-            throw "unknown main return type";
+            reportFatalError("unknown main return type");
         }
 
         cout << "Result: " << result << endl;

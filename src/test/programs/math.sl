@@ -5,12 +5,14 @@ fn main() -> int {
     let a = 10;
     let b = -1;
 
-    if (max(a, b) != a)
+    let max = max(a, b);
+    if (max != a)
     {
         return -1;
     }
 
-    if (min(a, b) != b)
+    let min = min(a, b);
+    if (min != b)
     {
         return -1;
     }

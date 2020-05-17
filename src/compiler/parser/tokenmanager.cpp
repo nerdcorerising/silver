@@ -56,7 +56,7 @@ namespace parse
                 return false;
             }
         } while (token.type() == TokenType::WhiteSpace || token.type() == TokenType::Comment);
-        
+
         return true;
     }
 
@@ -110,6 +110,8 @@ namespace parse
             return true;
         }
 
+        // TokenType::Error
+        token = Token();
         return false;
     }
 
@@ -126,6 +128,8 @@ namespace parse
         {
             if (!preloadLookAheads(sz))
             {
+                // TokenType::Error
+                token = Token();
                 return false;
             }
         }

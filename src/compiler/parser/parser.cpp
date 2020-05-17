@@ -20,42 +20,54 @@ namespace parse
 
     }
 
-    void Parser::expectCurrentTokenType(TokenType type, string message)
+    void Parser::reportFatalError(string message)
     {
-        expectTokenType(current(), type, message);
+        fprintf(stderr, "Error encountered during parsing: %s\n", message.c_str());
+        throw message;
     }
 
-    void Parser::expectCurrentTokenText(string text, string message)
+    bool Parser::expectCurrentTokenType(TokenType type, string message)
     {
-        expectTokenText(current(), text, message);
+        return expectTokenType(current(), type, message);
     }
 
-    void Parser::expectCurrentTokenTypeAndText(TokenType type, string text, string message)
+    bool Parser::expectCurrentTokenText(string text, string message)
     {
-        expectCurrentTokenType(type, message);
-        expectCurrentTokenText(text, message);
+        return expectTokenText(current(), text, message);
     }
 
-    void Parser::expectTokenType(Token token, TokenType type, string message)
+    bool Parser::expectCurrentTokenTypeAndText(TokenType type, string text, string message)
+    {
+        return expectCurrentTokenType(type, message)
+               && expectCurrentTokenText(text, message);
+    }
+
+    bool Parser::expectTokenType(Token token, TokenType type, string message)
     {
         if (token.type() != type)
         {
-            PARSE_ERROR(message);
+            reportFatalError(message);
+            return false;
         }
+
+        return true;
     }
 
-    void Parser::expectTokenText(Token token, string text, string message)
+    bool Parser::expectTokenText(Token token, string text, string message)
     {
         if (token.text() != text)
         {
-            PARSE_ERROR(message);
+            reportFatalError(message);
+            return false;
         }
+
+        return true;
     }
 
-    void Parser::expectTokenTypeAndText(Token token, TokenType type, string text, string message)
+    bool Parser::expectTokenTypeAndText(Token token, TokenType type, string text, string message)
     {
-        expectTokenType(token, type, message);
-        expectTokenText(token, text, message);
+        return expectTokenType(token, type, message)
+               && expectTokenText(token, text, message);
     }
 
     void Parser::advance()
@@ -68,7 +80,7 @@ namespace parse
         Token token;
         if (!mTokens.tryGetCurrent(token))
         {
-            PARSE_ERROR("Unexpected end of input");
+            reportFatalError("Unexpected end of input");
         }
 
         return token;
@@ -79,7 +91,7 @@ namespace parse
         Token token;
         if (!mTokens.tryGetLookAhead(token))
         {
-            PARSE_ERROR("Unexpected end of input");
+            reportFatalError("Unexpected end of input");
         }
 
         return token;
@@ -90,7 +102,7 @@ namespace parse
         Token token;
         if (!mTokens.tryGetLookAheadBy(pos, token))
         {
-            PARSE_ERROR("Unexpected end of input");
+            reportFatalError("Unexpected end of input");
         }
 
         return token;
@@ -176,7 +188,8 @@ namespace parse
         }
         else
         {
-            PARSE_ERROR("Could not find import file " + fileName.string());
+            reportFatalError("Could not find import file " + fileName.string());
+            return vector<shared_ptr<Function>>();
         }
     }
 
@@ -548,7 +561,7 @@ namespace parse
         }
         else
         {
-            PARSE_ERROR("Expected : or = after let");
+            reportFatalError("Expected : or = after let");
         }
 
         return shared_ptr<Expression>(new DeclarationNode(name, type, expression));

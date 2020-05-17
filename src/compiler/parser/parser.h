@@ -9,8 +9,6 @@
 #include "tokenmanager.h"
 #include "ast/ast.h"
 
-#define PARSE_ERROR(MSG) std::cout << MSG; throw "parse error"
-
 namespace parse
 {
     class Parser
@@ -19,6 +17,8 @@ namespace parse
         TokenManager mTokens;
 
         std::string mName;
+
+        void reportFatalError(std::string message);
 
         std::vector<std::shared_ptr<ast::Argument>> parseArgumentsForDeclaration();
         std::vector<std::shared_ptr<ast::Function>> parseImport();
@@ -36,13 +36,13 @@ namespace parse
 
         std::shared_ptr<ast::Expression> makeNode();
 
-        void expectCurrentTokenType(tok::TokenType type, std::string message);
-        void expectCurrentTokenText(std::string text, std::string message);
-        void expectCurrentTokenTypeAndText(tok::TokenType type, std::string text, std::string message);
+        bool expectCurrentTokenType(tok::TokenType type, std::string message);
+        bool expectCurrentTokenText(std::string text, std::string message);
+        bool expectCurrentTokenTypeAndText(tok::TokenType type, std::string text, std::string message);
 
-        void expectTokenType(tok::Token token, tok::TokenType type, std::string message);
-        void expectTokenText(tok::Token token, std::string text, std::string message);
-        void expectTokenTypeAndText(tok::Token token, tok::TokenType type, std::string text, std::string message);
+        bool expectTokenType(tok::Token token, tok::TokenType type, std::string message);
+        bool expectTokenText(tok::Token token, std::string text, std::string message);
+        bool expectTokenTypeAndText(tok::Token token, tok::TokenType type, std::string text, std::string message);
 
         int operatorPrecedence(tok::Token op);
 
