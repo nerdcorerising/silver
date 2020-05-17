@@ -9,12 +9,16 @@ def run_tests():
 
     for test_file, ret_code in tests:
         test_path = os.path.join("programs", test_file)
-        print(f"Running {test_path} and expecting return code {ret_code}")
-        response = subprocess.run(["silver", test_path], shell=True)
+        print(f"    Test {test_path} with return code {ret_code}")
+        response = subprocess.run(["silver", test_path], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if response.returncode != ret_code:
-            print(f"Test failed, expected code {ret_code} but got {response.returncode}")
+            print(f"    Test failed, expected code {ret_code} but got {response.returncode}")
         else:
-            print("Test passed!")
+            print("    Test passed!")
 
 if __name__ == "__main__":
+    print("")
+    print("")
+    print("")
+    print("Running silver tests")
     run_tests()

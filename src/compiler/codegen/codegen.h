@@ -76,7 +76,7 @@ namespace codegen
         CodeGen(std::shared_ptr<ast::Assembly> tree, std::string outFile="");
 
         void generate();
-        void runJit();
+        int runJit();
         void freeResources();
     };
 }

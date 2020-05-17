@@ -66,6 +66,5 @@ if not exist %ProgramsDir% (
 
 echo Copying binaries
 copy /y %ObjDir%\src\compiler\Debug\silver.* %BinDir%\
-copy /y %ObjDir%\src\test\Debug\test.* %BinDir%\
 copy /y src\test\programs\* %ProgramsDir%\
 copy /y src\test\*.py %BinDir%\

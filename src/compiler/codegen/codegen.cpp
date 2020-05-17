@@ -603,12 +603,12 @@ namespace codegen
         }
     }
 
-    void CodeGen::runJit()
+    int CodeGen::runJit()
     {
         if (mMain == nullptr)
         {
             cout << "No main() found." << endl;
-            return;
+            return -1;
         }
 
         llvm::ExecutionEngine *EE = llvm::EngineBuilder(unique_ptr<llvm::Module>(mModule)).create();
@@ -620,21 +620,22 @@ namespace codegen
         llvm::GenericValue gv = EE->runFunction(mMain, noargs);
 
         // Import result of execution:
+        int result = -1;
         if (mMain->getReturnType() == llvm::Type::getInt32Ty(mContext))
         {
-            cout << "Result: " << gv.IntVal.getSExtValue() << endl;
-        }
-        else if (mMain->getReturnType() == llvm::Type::getDoubleTy(mContext))
-        {
-            cout << "Result: " << gv.DoubleVal << endl;
+            result = (int)gv.IntVal.getSExtValue();
         }
         else
         {
             throw "unknown main return type";
         }
 
+        cout << "Result: " << result << endl;
+
         delete EE;
         llvm::llvm_shutdown();
+
+        return result;
     }
 
     void CodeGen::freeResources()

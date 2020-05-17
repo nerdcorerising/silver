@@ -120,15 +120,16 @@ int main(int argc, char **argv)
     CodeGen gen(node, out);
     gen.generate();
 
+    int result = -1;
     if (opt.runJit)
     {
         cout << "running as JIT" << endl;
-        gen.runJit();
+        result = gen.runJit();
     }
 
     gen.freeResources();
-    
-    return 0;
+
+    return result;
 }
 
 void waitForKey()
