@@ -13,5 +13,3 @@ set(SOURCES main.cpp ${PARSER_SOURCES} ${AST_SOURCES} ${ANALYSIS_SOURCES} ${CODE
 add_executable(silver ${SOURCES})
 
 target_link_libraries(silver ${DEPENDENCIES})
-
-install(TARGETS silver DESTINATION ${CMAKE_INSTALL_PREFIX})

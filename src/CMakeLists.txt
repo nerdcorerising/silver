@@ -1,3 +1,4 @@
+cmake_minimum_required(VERSION 3.1)
 
 add_subdirectory("compiler/")
 add_subdirectory("test/")

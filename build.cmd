@@ -32,8 +32,8 @@ echo   VS PATH      : %VS_CMD_PATH%
 echo.
 echo   Building
 
-set ObjDir=obj\
-set BinDir=bin\
+set ObjDir=%~dp0\obj
+set BinDir=%~dp0\bin
 
 if not exist %ObjDir% (
     mkdir %ObjDir%
@@ -59,6 +59,13 @@ if not exist %BinDir% (
     mkdir %BinDir%
 )
 
-echo Copying binary to main directory
-copy /y   %ObjDir%\src\compiler\Debug\silver.exe %BinDir%\
+set ProgramsDir=%BinDir%\programs
+if not exist %ProgramsDir% (
+    mkdir %ProgramsDir%
+)
 
+echo Copying binaries
+copy /y %ObjDir%\src\compiler\Debug\silver.* %BinDir%\
+copy /y %ObjDir%\src\test\Debug\test.* %BinDir%\
+copy /y src\test\programs\* %ProgramsDir%\
+copy /y src\test\*.py %BinDir%\
