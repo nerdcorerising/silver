@@ -54,6 +54,8 @@ namespace codegen
         llvm::IRBuilder<> mBuilder;
         llvm::legacy::FunctionPassManager *mFpm;
 
+        void addSystemCalls();
+
         void reportFatalError(std::string message);
 
         void putFunc(std::string name, llvm::Function *func);

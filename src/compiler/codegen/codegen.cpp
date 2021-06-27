@@ -10,6 +10,7 @@ using namespace std;
 using namespace ast;
 
 // TODO: type inference
+#error The call to printf causes a segfault, see what you're doing wrong
 
 namespace codegen
 {
@@ -27,6 +28,15 @@ namespace codegen
 
     }
 
+    void CodeGen::addSystemCalls()
+    {
+        // Add printf as a valid target
+        llvm::FunctionType *printFType = llvm::FunctionType::get(llvm::IntegerType::getInt32Ty(mContext), llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
+        llvm::FunctionCallee callee = mModule->getOrInsertFunction("printf", printFType, true /*vararg*/);
+        llvm::Value *funcVal = callee.getCallee();
+        llvm::Function *llvmFunc = llvm::cast<llvm::Function>(funcVal);
+        putFunc("printf", llvmFunc);
+    }
 
     void CodeGen::reportFatalError(string message)
     {
@@ -91,6 +101,8 @@ namespace codegen
 
     void CodeGen::generateAssembly(shared_ptr<Assembly> assembly)
     {
+        addSystemCalls();
+
         vector<shared_ptr<Function>> functions = assembly->getFunctions();
 
         for (auto it = functions.begin(); it != functions.end(); ++it)
