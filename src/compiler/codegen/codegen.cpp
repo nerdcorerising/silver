@@ -3,7 +3,8 @@
 #include "codegen.h"
 
 #include <string>
-
+#include "llvm/Transforms/Utils.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
 
 using namespace std;
 using namespace ast;
@@ -111,7 +112,8 @@ namespace codegen
         vector<llvm::Type *> argTypes = getFunctionArgumentTypes(function);
         llvm::FunctionType *type = llvm::FunctionType::get(retType, argTypes, false);
 
-        llvm::Function *llvmFunc = llvm::cast<llvm::Function>(mModule->getOrInsertFunction(function->getName(), type));
+        llvm::Value *funcVal = mModule->getOrInsertFunction(function->getName(), type).getCallee();
+        llvm::Function *llvmFunc = llvm::cast<llvm::Function>(funcVal);
         putFunc(function->getName(), llvmFunc);
 
         if (function->getName() == "main")
@@ -643,7 +645,7 @@ namespace codegen
         {
             ostream output(&fb);
             llvm::raw_os_ostream ls(output);
-            llvm::WriteBitcodeToFile(mModule, ls);
+            llvm::WriteBitcodeToFile(*mModule, ls);
         }
     }
 

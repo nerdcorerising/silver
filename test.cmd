@@ -5,4 +5,4 @@ pushd bin\
 
 python test.py
 
-popd bin
+popd

@@ -4,6 +4,8 @@
 export objDir="$PWD/obj"
 export binDir="$PWD/bin/"
 export currentDir="$PWD"
+export programsDir=$binDir/programs
+export frameworkDir=$binDir/framework
 
 export __CMakeBuildType="debug"
 export __CMakeBinDir="$binDir"
@@ -17,6 +19,13 @@ if [ ! -d "$binDir" ]; then
 	mkdir "$binDir"
 fi
 
+if [ ! -d "$programsDir" ]; then 
+    mkdir -p "$programsDir"
+fi
+
+if [ ! -d "$frameworkDir" ]; then 
+    mkdir -p "$frameworkDir"
+fi
 
 while :; do
     if [ $# -le 0 ]; then
@@ -66,12 +75,10 @@ if [[ $rc != 0 ]]; then
 	exit $rc;
 fi
 
-make install
-rc=$?
-if [[ $rc != 0 ]]; then 
-	popd;
-	exit $rc;
-fi
-
-
 popd
+
+echo Copying binaries
+cp -f $objDir/src/compiler/silver $binDir/
+cp -f src/compiler/framework/* $frameworkDir/
+cp -f src/test/programs/* $programsDir/
+cp -f src/test/*.py $binDir/
