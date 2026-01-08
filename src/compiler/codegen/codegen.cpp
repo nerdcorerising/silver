@@ -5,12 +5,13 @@
 #include <string>
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar/GVN.h"
 
 using namespace std;
 using namespace ast;
 
 // TODO: type inference
-#error The call to printf causes a segfault, see what you're doing wrong
+// TODO: The call to printf causes a segfault, see what you're doing wrong
 
 namespace codegen
 {
@@ -72,7 +73,7 @@ namespace codegen
         }
         else if (str == "string")
         {
-            return llvm::Type::getInt8PtrTy(mContext);
+            return llvm::PointerType::getUnqual(mContext);
         }
         else if (str == "void")
         {
@@ -519,7 +520,7 @@ namespace codegen
             shared_ptr<IdentifierNode> var = dynamic_pointer_cast<IdentifierNode>(expression);
             llvm::AllocaInst *inst = mTable.get(var->getValue());
 
-            return mBuilder.CreateLoad(inst);
+            return mBuilder.CreateLoad(inst->getAllocatedType(), inst);
         }
         case ExpressionType::Declaration:
         {
@@ -530,6 +531,15 @@ namespace codegen
 
             llvm::AllocaInst *inst = mBuilder.CreateAlloca(type, 0, decl->getName());
             mTable.put(decl->getName(), inst);
+
+            // If declaration has an initializer, store the value
+            shared_ptr<Expression> initExpr = decl->getExpression();
+            if (initExpr != nullptr)
+            {
+                llvm::Value *initValue = generateExpression(initExpr);
+                mBuilder.CreateStore(initValue, inst);
+            }
+
             return inst;
         }
         case ExpressionType::Return:
@@ -595,13 +605,13 @@ namespace codegen
     llvm::Value *CodeGen::generateBlock(shared_ptr<BlockNode> block, llvm::Function * llvmFunc)
     {
         llvm::BasicBlock *basicBlock;
-        if (llvmFunc->getBasicBlockList().size() == 0)
+        if (llvmFunc->empty())
         {
             basicBlock = llvm::BasicBlock::Create(mContext, "", llvmFunc, 0);
         }
         else
         {
-            basicBlock = &llvmFunc->getBasicBlockList().front();
+            basicBlock = &llvmFunc->front();
         }
 
         return generateIntoBlock(basicBlock, block);
@@ -642,7 +652,7 @@ namespace codegen
         // Reassociate expressions.
         mFpm->add(llvm::createReassociatePass());
         // Eliminate Common SubExpressions.
-        mFpm->add(llvm::createNewGVNPass());
+        mFpm->add(llvm::createGVNPass());
         // Simplify the control flow graph (deleting unreachable blocks, etc).
         mFpm->add(llvm::createCFGSimplificationPass());
 

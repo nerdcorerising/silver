@@ -8,22 +8,24 @@ Silver is a toy compiled language using LLVM as its backend. It aims to provide 
 
 ## Build Commands
 
-```bash
-# Install LLVM via vcpkg
-vcpkg install llvm
+### Windows
 
-# Configure (from repository root, using vcpkg toolchain)
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=[vcpkg-root]/scripts/buildsystems/vcpkg.cmake
+```cmd
+# Download LLVM from https://github.com/llvm/llvm-project/releases
+# Install to a location like C:\Program Files\LLVM
 
-# Build
-cmake --build build
+# Set LLVM_DIR to point to the cmake config directory
+set LLVM_DIR=C:\Program Files\LLVM\lib\cmake\llvm
 
-# The executable is output to build/src/compiler/silver (or silver.exe on Windows)
+# Run the build script
+build.cmd
 ```
 
 ### Prerequisites
 
-- **vcpkg** with LLVM installed (`vcpkg install llvm`)
+- **LLVM** - Download pre-built binaries from [LLVM Releases](https://github.com/llvm/llvm-project/releases)
+- **Visual Studio 2022** with C++ tools
+- **CMake** and **Ninja**
 
 ## Running Tests
 

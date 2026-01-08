@@ -134,7 +134,20 @@ namespace analysis
 
                 if (decl->getTypeName() == "")
                 {
-                    untypedNodes.insert({decl->getName(), decl});
+                    // Check if declaration has an initializer expression
+                    shared_ptr<Expression> initExpr = decl->getExpression();
+                    if (initExpr != nullptr)
+                    {
+                        // Infer type from the initializer expression
+                        string inferredType = getTypeForExpression(initExpr, symbols);
+                        decl->setTypeName(inferredType);
+                        symbols.put(decl->getName(), inferredType);
+                    }
+                    else
+                    {
+                        // No initializer, wait for a later assignment to infer type
+                        untypedNodes.insert({decl->getName(), decl});
+                    }
                 }
                 else
                 {
