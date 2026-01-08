@@ -35,3 +35,6 @@ bin/
 obj/
 *.bc
 .DS_STORE
+
+# vcpkg
+vcpkg_installed/
