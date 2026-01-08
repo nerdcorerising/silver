@@ -97,7 +97,6 @@ int main(int argc, char **argv)
             parse::Parser parser("sample", tok, input);
 
             node = parser.parse();
-            node->prettyPrint(cout);
             fb.close();
         }
         else
@@ -109,6 +108,8 @@ int main(int argc, char **argv)
 
         AnalysisPassManager analysis(opt.buildType);
         analysis.performPasses(node);
+
+        node->prettyPrint(cout);
 
         string out = "";
         if (opt.genByteCode)

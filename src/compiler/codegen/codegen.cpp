@@ -31,9 +31,14 @@ namespace codegen
 
     void CodeGen::addSystemCalls()
     {
-        // Add printf as a valid target
-        llvm::FunctionType *printFType = llvm::FunctionType::get(llvm::IntegerType::getInt32Ty(mContext), llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
-        llvm::FunctionCallee callee = mModule->getOrInsertFunction("printf", printFType, true /*vararg*/);
+        // Add printf as a valid target: int printf(const char* format, ...)
+        std::vector<llvm::Type*> printfParams;
+        printfParams.push_back(llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
+        llvm::FunctionType *printFType = llvm::FunctionType::get(
+            llvm::IntegerType::getInt32Ty(mContext),  // return type: int
+            printfParams,                              // params: const char*
+            true);                                     // isVarArg: true
+        llvm::FunctionCallee callee = mModule->getOrInsertFunction("printf", printFType);
         llvm::Value *funcVal = callee.getCallee();
         llvm::Function *llvmFunc = llvm::cast<llvm::Function>(funcVal);
         putFunc("printf", llvmFunc);
@@ -145,6 +150,7 @@ namespace codegen
 
     llvm::Value *CodeGen::generateFunction(shared_ptr<Function> function)
     {
+        fprintf(stderr, "Codegen: Generating function %s\n", function->getName().c_str());
         mTable.enterContext();
         llvm::Function *llvmFunc = getFunc(function->getName());
         if (llvmFunc == nullptr)
@@ -170,8 +176,10 @@ namespace codegen
         }
 
         generateBlock(function->getBlock(), llvmFunc);
+        fprintf(stderr, "Codegen: Running optimization passes on %s\n", function->getName().c_str());
 
         mFpm->run(*llvmFunc);
+        fprintf(stderr, "Codegen: Finished function %s\n", function->getName().c_str());
 
         mTable.leaveContext();
         return llvmFunc;
@@ -451,13 +459,17 @@ namespace codegen
             }
         }
 
-        if (terminated)
+        // Only delete end block if:
+        // 1. There IS an else block (so conditional branch targets elseBasicBlock, not end)
+        // 2. No body blocks branch to end (terminated is false)
+        // If there's no else block, end is referenced by the conditional branch's false path
+        if (elseBlock != nullptr && !terminated)
         {
-            mBuilder.SetInsertPoint(end);
+            end->eraseFromParent();
         }
         else
         {
-            end->eraseFromParent();
+            mBuilder.SetInsertPoint(end);
         }
     }
 
@@ -525,6 +537,7 @@ namespace codegen
         case ExpressionType::Declaration:
         {
             shared_ptr<DeclarationNode> decl = dynamic_pointer_cast<DeclarationNode>(expression);
+            fprintf(stderr, "Codegen: Declaration %s type=%s\n", decl->getName().c_str(), decl->getTypeName().c_str());
 
             ASSERT(decl->getTypeName() != "");
             llvm::Type *type = stringToType(decl->getTypeName());
@@ -536,7 +549,9 @@ namespace codegen
             shared_ptr<Expression> initExpr = decl->getExpression();
             if (initExpr != nullptr)
             {
+                fprintf(stderr, "Codegen: Generating initializer for %s\n", decl->getName().c_str());
                 llvm::Value *initValue = generateExpression(initExpr);
+                fprintf(stderr, "Codegen: Storing initializer for %s\n", decl->getName().c_str());
                 mBuilder.CreateStore(initValue, inst);
             }
 
@@ -659,7 +674,9 @@ namespace codegen
         mFpm->doInitialization();
 
         generateAssembly(assembly);
+        fprintf(stderr, "Codegen: Assembly generation complete, printing module\n");
         mModule->print(llvm::errs(), nullptr);
+        fprintf(stderr, "Codegen: Module printed, verifying\n");
         llvm::verifyModule(*mModule);
 
         filebuf fb;

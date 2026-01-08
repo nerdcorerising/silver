@@ -196,6 +196,11 @@ namespace ast
         return mExpression;
     }
 
+    void DeclarationNode::clearExpression()
+    {
+        mExpression = nullptr;
+    }
+
     void DeclarationNode::prettyPrint(ostream &out, size_t indent)
     {
         UNREFERENCED(indent);

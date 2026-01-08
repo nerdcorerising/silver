@@ -25,6 +25,9 @@ namespace analysis
                     shared_ptr<Expression> identifier = shared_ptr<Expression>(new IdentifierNode(declaration->getName()));
                     shared_ptr<Expression> assignment = shared_ptr<Expression>(new BinaryExpressionNode(identifier, declaration->getExpression(), "="));
 
+                    // Clear the expression from declaration since we've extracted it into a separate assignment
+                    declaration->clearExpression();
+
                     expressions.insert(expressions.begin() + (i + 1), assignment);
                 }
             }

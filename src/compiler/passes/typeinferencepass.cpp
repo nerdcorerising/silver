@@ -140,6 +140,7 @@ namespace analysis
                     {
                         // Infer type from the initializer expression
                         string inferredType = getTypeForExpression(initExpr, symbols);
+                        fprintf(stderr, "Type inference: %s -> %s\n", decl->getName().c_str(), inferredType.c_str());
                         decl->setTypeName(inferredType);
                         symbols.put(decl->getName(), inferredType);
                     }
