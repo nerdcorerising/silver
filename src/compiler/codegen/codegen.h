@@ -32,6 +32,11 @@
 #include "llvm/ExecutionEngine/Interpreter.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/DynamicLibrary.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/TargetParser/Host.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
 #pragma warning (pop)
 
 #include "parser/parser.h"
@@ -89,6 +94,7 @@ namespace codegen
 
         void generate();
         int runJit();
+        bool compileToExecutable(const std::string& outputPath);
         void freeResources();
     };
 }

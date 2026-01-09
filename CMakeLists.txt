@@ -42,6 +42,13 @@ llvm_map_components_to_libnames(LLVM_LIBS
     core
     executionengine
     interpreter
+    orcjit
+    nativecodegen
+    X86
+    X86CodeGen
+    X86AsmParser
+    X86Desc
+    X86Info
     support
     bitwriter
     passes

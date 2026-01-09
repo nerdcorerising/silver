@@ -19,14 +19,17 @@ struct ProgramOpts
 {
 public:
     inline ProgramOpts() :
-        runJit(true),
-        genByteCode(false)
+        runJit(false),
+        genByteCode(false),
+        compile(false)
     {
         buildType = BuildType::Debug;
     }
 
     bool runJit;
     bool genByteCode;
+    bool compile;
+    string outputName;
     BuildType buildType;
 };
 
@@ -65,7 +68,21 @@ Opts getOpts(int argc, char **argv)
             {
                 opt.buildType = BuildType::Release;
             }
+            else if (realArg == "compile" || realArg == "c")
+            {
+                opt.compile = true;
+            }
+            else if (realArg.substr(0, 2) == "o:")
+            {
+                opt.outputName = realArg.substr(2);
+            }
         }
+    }
+
+    // Default to compile if neither jit nor compile specified
+    if (!opt.runJit && !opt.compile)
+    {
+        opt.compile = true;
     }
 
     return opt;
@@ -120,8 +137,36 @@ int main(int argc, char **argv)
         CodeGen gen(node, out);
         gen.generate();
 
-        cout << "running as JIT" << endl;
-        result = gen.runJit();
+        if (opt.runJit)
+        {
+            cout << "running as JIT" << endl;
+            result = gen.runJit();
+        }
+        else if (opt.compile)
+        {
+            // Determine output name
+            string outputName = opt.outputName;
+            if (outputName.empty())
+            {
+                // Use input filename without extension
+                outputName = file;
+                size_t dotPos = outputName.rfind('.');
+                if (dotPos != string::npos)
+                {
+                    outputName = outputName.substr(0, dotPos);
+                }
+            }
+
+            cout << "Compiling to executable..." << endl;
+            if (gen.compileToExecutable(outputName))
+            {
+                result = 0;
+            }
+            else
+            {
+                result = -1;
+            }
+        }
 
         gen.freeResources();
     }

@@ -80,6 +80,7 @@ if not exist %FrameworkDir% (
 
 echo Copying binaries
 copy /y %ObjDir%\src\compiler\silver.* %BinDir%\
+copy /y %ObjDir%\src\runtime\silver_runtime.lib %BinDir%\
 copy /y src\compiler\framework\* %FrameworkDir%\
 copy /y src\test\programs\* %ProgramsDir%\
 copy /y src\test\*.py %BinDir%\

@@ -12,6 +12,22 @@
 using namespace std;
 using namespace ast;
 
+// Runtime functions built into the compiler for JIT execution
+extern "C" {
+    void silver_print_string(const char* s) {
+        printf("%s\n", s);
+    }
+    void silver_print_int(int n) {
+        printf("%d\n", n);
+    }
+    void silver_print_float(double f) {
+        printf("%f\n", f);
+    }
+    int silver_strcmp(const char* a, const char* b) {
+        return strcmp(a, b) == 0 ? 1 : 0;
+    }
+}
+
 // TODO: type inference
 // TODO: The call to printf causes a segfault, see what you're doing wrong
 
@@ -33,97 +49,34 @@ namespace codegen
 
     void CodeGen::addSystemCalls()
     {
-        // Add printf as a valid target: int printf(const char* format, ...)
-        std::vector<llvm::Type*> printfParams;
-        printfParams.push_back(llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
-        llvm::FunctionType *printFType = llvm::FunctionType::get(
-            llvm::IntegerType::getInt32Ty(mContext),  // return type: int
-            printfParams,                              // params: const char*
-            true);                                     // isVarArg: true
-        llvm::FunctionCallee printfCallee = mModule->getOrInsertFunction("printf", printFType);
-        llvm::Value *printfVal = printfCallee.getCallee();
-        llvm::Function *printfFunc = llvm::cast<llvm::Function>(printfVal);
-        putFunc("printf", printfFunc);
+        llvm::Type *voidTy = llvm::Type::getVoidTy(mContext);
+        llvm::Type *i32Ty = llvm::Type::getInt32Ty(mContext);
+        llvm::Type *i8PtrTy = llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0);
+        llvm::Type *doubleTy = llvm::Type::getDoubleTy(mContext);
 
-        // Create __silver_strcmp function: i1 __silver_strcmp(i8* s1, i8* s2)
-        // Returns true (1) if strings are equal, false (0) otherwise
-        std::vector<llvm::Type*> strcmpParams;
-        strcmpParams.push_back(llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
-        strcmpParams.push_back(llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
-        llvm::FunctionType *strcmpFType = llvm::FunctionType::get(
-            llvm::Type::getInt1Ty(mContext),  // return type: i1 (bool)
-            strcmpParams,                      // params: i8*, i8*
-            false);                            // isVarArg: false
+        // silver_print_string(const char* s) -> void
+        llvm::FunctionType *printStringTy = llvm::FunctionType::get(voidTy, {i8PtrTy}, false);
+        llvm::Function *printStringFunc = llvm::Function::Create(
+            printStringTy, llvm::Function::ExternalLinkage, "silver_print_string", mModule);
+        putFunc("silver_print_string", printStringFunc);
 
+        // silver_print_int(int n) -> void
+        llvm::FunctionType *printIntTy = llvm::FunctionType::get(voidTy, {i32Ty}, false);
+        llvm::Function *printIntFunc = llvm::Function::Create(
+            printIntTy, llvm::Function::ExternalLinkage, "silver_print_int", mModule);
+        putFunc("silver_print_int", printIntFunc);
+
+        // silver_print_float(double f) -> void
+        llvm::FunctionType *printFloatTy = llvm::FunctionType::get(voidTy, {doubleTy}, false);
+        llvm::Function *printFloatFunc = llvm::Function::Create(
+            printFloatTy, llvm::Function::ExternalLinkage, "silver_print_float", mModule);
+        putFunc("silver_print_float", printFloatFunc);
+
+        // silver_strcmp(const char* a, const char* b) -> int (1 if equal, 0 if not)
+        llvm::FunctionType *strcmpTy = llvm::FunctionType::get(i32Ty, {i8PtrTy, i8PtrTy}, false);
         llvm::Function *strcmpFunc = llvm::Function::Create(
-            strcmpFType, llvm::Function::InternalLinkage, "__silver_strcmp", mModule);
-
-        // Mark as noinline to avoid optimization issues
-        strcmpFunc->addFnAttr(llvm::Attribute::NoInline);
-
-        // Create the function body using alloca instead of PHI to be more robust
-        llvm::BasicBlock *entryBB = llvm::BasicBlock::Create(mContext, "entry", strcmpFunc);
-        llvm::BasicBlock *loopBB = llvm::BasicBlock::Create(mContext, "loop", strcmpFunc);
-        llvm::BasicBlock *equalBB = llvm::BasicBlock::Create(mContext, "equal", strcmpFunc);
-        llvm::BasicBlock *notEqualBB = llvm::BasicBlock::Create(mContext, "notequal", strcmpFunc);
-
-        llvm::IRBuilder<> builder(mContext);
-
-        // Get function arguments
-        auto argIt = strcmpFunc->arg_begin();
-        llvm::Value *s1 = &(*argIt++);
-        llvm::Value *s2 = &(*argIt);
-        s1->setName("s1");
-        s2->setName("s2");
-
-        // Entry block - allocate index, initialize to 0, jump to loop
-        builder.SetInsertPoint(entryBB);
-        llvm::AllocaInst *idxPtr = builder.CreateAlloca(llvm::Type::getInt64Ty(mContext), nullptr, "idx_ptr");
-        builder.CreateStore(llvm::ConstantInt::get(llvm::Type::getInt64Ty(mContext), 0), idxPtr);
-        builder.CreateBr(loopBB);
-
-        // Loop block - load index, compare characters
-        builder.SetInsertPoint(loopBB);
-        llvm::Value *idx = builder.CreateLoad(llvm::Type::getInt64Ty(mContext), idxPtr, "idx");
-
-        // Load characters from both strings
-        llvm::Value *ptr1 = builder.CreateGEP(llvm::Type::getInt8Ty(mContext), s1, idx, "ptr1");
-        llvm::Value *ptr2 = builder.CreateGEP(llvm::Type::getInt8Ty(mContext), s2, idx, "ptr2");
-        llvm::Value *char1 = builder.CreateLoad(llvm::Type::getInt8Ty(mContext), ptr1, "char1");
-        llvm::Value *char2 = builder.CreateLoad(llvm::Type::getInt8Ty(mContext), ptr2, "char2");
-
-        // Compare characters - if not equal, return false
-        llvm::Value *charsEqual = builder.CreateICmpEQ(char1, char2, "chars_eq");
-
-        // Create blocks for after-comparison logic
-        llvm::BasicBlock *checkNullBB = llvm::BasicBlock::Create(mContext, "check_null", strcmpFunc);
-        builder.CreateCondBr(charsEqual, checkNullBB, notEqualBB);
-
-        // Check null block - if chars are equal, check if we hit null terminator
-        builder.SetInsertPoint(checkNullBB);
-        llvm::Value *isNull = builder.CreateICmpEQ(char1,
-            llvm::ConstantInt::get(llvm::Type::getInt8Ty(mContext), 0), "is_null");
-
-        // Create continue block for incrementing and looping
-        llvm::BasicBlock *continueBB = llvm::BasicBlock::Create(mContext, "continue", strcmpFunc);
-        builder.CreateCondBr(isNull, equalBB, continueBB);
-
-        // Continue block - increment index and loop back
-        builder.SetInsertPoint(continueBB);
-        llvm::Value *nextIdx = builder.CreateAdd(idx,
-            llvm::ConstantInt::get(llvm::Type::getInt64Ty(mContext), 1), "next_idx");
-        builder.CreateStore(nextIdx, idxPtr);
-        builder.CreateBr(loopBB);
-
-        // Equal block - return true
-        builder.SetInsertPoint(equalBB);
-        builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt1Ty(mContext), 1));
-
-        // Not equal block - return false
-        builder.SetInsertPoint(notEqualBB);
-        builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt1Ty(mContext), 0));
-
-        putFunc("__silver_strcmp", strcmpFunc);
+            strcmpTy, llvm::Function::ExternalLinkage, "silver_strcmp", mModule);
+        putFunc("silver_strcmp", strcmpFunc);
     }
 
     void CodeGen::reportFatalError(string message)
@@ -403,21 +356,24 @@ namespace codegen
         }
         else if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy())
         {
-            // String comparison - call our generated strcmp function
+            // String comparison - call runtime strcmp function
             if (op == "==" || op == "!=")
             {
-                llvm::Function *strcmpFunc = getFunc("__silver_strcmp");
+                llvm::Function *strcmpFunc = getFunc("silver_strcmp");
                 if (strcmpFunc == nullptr)
                 {
-                    reportFatalError("__silver_strcmp function not found");
+                    reportFatalError("silver_strcmp function not found");
                     return nullptr;
                 }
 
-                // Call __silver_strcmp(lhs, rhs) - returns i1 (true if equal)
+                // Call silver_strcmp(lhs, rhs) - returns i32 (1 if equal, 0 if not)
                 std::vector<llvm::Value*> args;
                 args.push_back(lhs);
                 args.push_back(rhs);
-                llvm::Value *result = mBuilder.CreateCall(strcmpFunc, args, "streq");
+                llvm::Value *intResult = mBuilder.CreateCall(strcmpFunc, args, "strcmp_result");
+                // Convert i32 to i1 for boolean operations
+                llvm::Value *result = mBuilder.CreateICmpNE(intResult,
+                    llvm::ConstantInt::get(llvm::Type::getInt32Ty(mContext), 0), "streq");
 
                 if (op == "==")
                 {
@@ -1024,8 +980,7 @@ namespace codegen
         // Promote allocas to registers.
         mFpm->add(llvm::createPromoteMemoryToRegisterPass());
         // Do simple "peephole" optimizations and bit-twiddling optzns.
-        // NOTE: Disabled because it converts printf to puts which JIT can't resolve
-        // mFpm->add(llvm::createInstructionCombiningPass());
+        mFpm->add(llvm::createInstructionCombiningPass());
         // Reassociate expressions.
         mFpm->add(llvm::createReassociatePass());
         // Eliminate Common SubExpressions.
@@ -1059,9 +1014,21 @@ namespace codegen
             return -1;
         }
 
+        // Initialize native target for JIT
+        llvm::InitializeNativeTarget();
+        llvm::InitializeNativeTargetAsmPrinter();
+        llvm::InitializeNativeTargetAsmParser();
+
+        // Register built-in runtime functions with LLVM
+        llvm::sys::DynamicLibrary::AddSymbol("silver_print_string", (void*)silver_print_string);
+        llvm::sys::DynamicLibrary::AddSymbol("silver_print_int", (void*)silver_print_int);
+        llvm::sys::DynamicLibrary::AddSymbol("silver_print_float", (void*)silver_print_float);
+        llvm::sys::DynamicLibrary::AddSymbol("silver_strcmp", (void*)silver_strcmp);
+
         std::string errStr;
         llvm::ExecutionEngine *EE = llvm::EngineBuilder(unique_ptr<llvm::Module>(mModule))
             .setErrorStr(&errStr)
+            .setEngineKind(llvm::EngineKind::JIT)
             .create();
 
         if (!EE) {
@@ -1093,6 +1060,89 @@ namespace codegen
         llvm::llvm_shutdown();
 
         return result;
+    }
+
+    bool CodeGen::compileToExecutable(const std::string& outputPath)
+    {
+        // Initialize native target
+        llvm::InitializeNativeTarget();
+        llvm::InitializeNativeTargetAsmPrinter();
+        llvm::InitializeNativeTargetAsmParser();
+
+        // Get the target triple for this machine
+        std::string targetTriple = llvm::sys::getDefaultTargetTriple();
+        mModule->setTargetTriple(llvm::Triple(targetTriple));
+
+        // Look up the target
+        std::string error;
+        const llvm::Target *target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+        if (!target)
+        {
+            cerr << "Failed to lookup target: " << error << endl;
+            return false;
+        }
+
+        // Create target machine
+        llvm::TargetOptions opt;
+        llvm::TargetMachine *targetMachine = target->createTargetMachine(
+            targetTriple, "generic", "", opt, llvm::Reloc::PIC_);
+
+        if (!targetMachine)
+        {
+            cerr << "Failed to create target machine" << endl;
+            return false;
+        }
+
+        mModule->setDataLayout(targetMachine->createDataLayout());
+
+        // Generate object file
+        std::string objPath = outputPath + ".obj";
+        std::error_code ec;
+        llvm::raw_fd_ostream dest(objPath, ec, llvm::sys::fs::OF_None);
+        if (ec)
+        {
+            cerr << "Could not open file: " << ec.message() << endl;
+            return false;
+        }
+
+        llvm::legacy::PassManager passManager;
+        if (targetMachine->addPassesToEmitFile(passManager, dest, nullptr,
+            llvm::CodeGenFileType::ObjectFile))
+        {
+            cerr << "Target machine can't emit object file" << endl;
+            return false;
+        }
+
+        passManager.run(*mModule);
+        dest.flush();
+        dest.close();
+
+        cout << "Generated object file: " << objPath << endl;
+
+        // Link with runtime to create executable
+        std::string exePath = outputPath + ".exe";
+        std::string linkCmd = "link.exe /nologo /subsystem:console ";
+        linkCmd += "/out:" + exePath + " ";
+        linkCmd += objPath + " ";
+        linkCmd += "silver_runtime.lib ";
+        linkCmd += "libcmt.lib libvcruntime.lib libucrt.lib kernel32.lib ";
+
+        cout << "Linking: " << linkCmd << endl;
+        int linkResult = system(linkCmd.c_str());
+
+        if (linkResult != 0)
+        {
+            cerr << "Linking failed with code " << linkResult << endl;
+            return false;
+        }
+
+        cout << "Generated executable: " << exePath << endl;
+
+        // Clean up object file
+        remove(objPath.c_str());
+
+        delete targetMachine;
+        return true;
     }
 
     void CodeGen::freeResources()
