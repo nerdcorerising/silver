@@ -12,6 +12,8 @@ namespace ast
 {
     class Function;
     class Expression;
+    class ClassDeclaration;
+    class Field;
 
     // Valid expression types
     enum ExpressionType
@@ -30,7 +32,16 @@ namespace ast
         IfBlock,
         If,
         While,
-        Block
+        Block,
+        Alloc,
+        MemberAccess
+    };
+
+    // Visibility for class fields
+    enum class Visibility
+    {
+        Public,
+        Private
     };
 
     class Node
@@ -49,14 +60,18 @@ namespace ast
     {
     private:
         std::vector<std::shared_ptr<Function>> mFunctions;
+        std::vector<std::shared_ptr<ClassDeclaration>> mClasses;
         std::string mName;
 
     public:
-        Assembly(std::string name, std::vector<std::shared_ptr<Function>> functions);
+        Assembly(std::string name,
+                 std::vector<std::shared_ptr<Function>> functions,
+                 std::vector<std::shared_ptr<ClassDeclaration>> classes = {});
         virtual ~Assembly() = default;
 
         size_t size();
         std::vector<std::shared_ptr<Function>> getFunctions();
+        std::vector<std::shared_ptr<ClassDeclaration>> getClasses();
         std::string getName();
         void prettyPrint(std::ostream &out);
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
@@ -318,6 +333,75 @@ namespace ast
 
         std::shared_ptr<Expression> getCondition();
         std::shared_ptr<BlockNode> getBlock();
+        virtual ExpressionType getExpressionType() override;
+        virtual void prettyPrint(std::ostream &out, size_t indent) override;
+    };
+
+    // Represents a field in a class: "x: public int"
+    class Field : public Node
+    {
+    private:
+        std::string mName;
+        std::string mType;
+        Visibility mVisibility;
+
+    public:
+        Field(std::string name, std::string type, Visibility visibility);
+        virtual ~Field() = default;
+
+        std::string getName() const;
+        std::string getType() const;
+        Visibility getVisibility() const;
+        virtual void prettyPrint(std::ostream &out, size_t indent) override;
+    };
+
+    // Represents a class declaration: "class MyType { ... }"
+    class ClassDeclaration : public Node
+    {
+    private:
+        std::string mName;
+        std::vector<std::shared_ptr<Field>> mFields;
+
+    public:
+        ClassDeclaration(std::string name, std::vector<std::shared_ptr<Field>> fields);
+        virtual ~ClassDeclaration() = default;
+
+        std::string getName() const;
+        std::vector<std::shared_ptr<Field>> getFields() const;
+        size_t getFieldIndex(const std::string& fieldName) const;
+        virtual void prettyPrint(std::ostream &out, size_t indent) override;
+    };
+
+    // Represents allocation: "alloc MyType(args...)"
+    class AllocNode : public Expression
+    {
+    private:
+        std::string mTypeName;
+        std::vector<std::shared_ptr<Expression>> mArgs;
+
+    public:
+        AllocNode(std::string typeName, std::vector<std::shared_ptr<Expression>> args);
+        virtual ~AllocNode() = default;
+
+        std::string getTypeName() const;
+        std::vector<std::shared_ptr<Expression>> getArgs() const;
+        virtual ExpressionType getExpressionType() override;
+        virtual void prettyPrint(std::ostream &out, size_t indent) override;
+    };
+
+    // Represents member access: "obj.field"
+    class MemberAccessNode : public Expression
+    {
+    private:
+        std::shared_ptr<Expression> mObject;
+        std::string mMemberName;
+
+    public:
+        MemberAccessNode(std::shared_ptr<Expression> object, std::string memberName);
+        virtual ~MemberAccessNode() = default;
+
+        std::shared_ptr<Expression> getObject() const;
+        std::string getMemberName() const;
         virtual ExpressionType getExpressionType() override;
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
     };

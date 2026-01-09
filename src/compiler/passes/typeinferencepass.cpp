@@ -101,9 +101,30 @@ namespace analysis
             return cast->getCastType();
         }
         break;
+        case ExpressionType::Alloc:
+        {
+            shared_ptr<AllocNode> alloc = dynamic_pointer_cast<AllocNode>(expression);
+            return alloc->getTypeName();
+        }
+        break;
+        case ExpressionType::MemberAccess:
+        {
+            shared_ptr<MemberAccessNode> member = dynamic_pointer_cast<MemberAccessNode>(expression);
+            // Get the type of the object being accessed
+            string objectType = getTypeForExpression(member->getObject(), symbols);
+            // Look up the field type using "ClassName.fieldName"
+            string fieldKey = objectType + "." + member->getMemberName();
+            string fieldType = symbols.get(fieldKey);
+            if (fieldType.empty())
+            {
+                OPTIMIZATION_ERROR("Unknown field: " + member->getMemberName() + " in type " + objectType);
+            }
+            return fieldType;
+        }
+        break;
         default:
         {
-            OPTIMIZATION_ERROR("Unknown type");
+            OPTIMIZATION_ERROR("Unknown type in getTypeForExpression");
         }
         break;
         }

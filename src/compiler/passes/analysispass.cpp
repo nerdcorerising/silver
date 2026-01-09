@@ -86,13 +86,33 @@ namespace analysis
         {
             string name = (*func)->getName() + "()";
             symbols.put(name, (*func)->getReturnType());
-        }   
+        }
+    }
+
+    void AnalysisPassManager::defineClasses(shared_ptr<Assembly> assembly, SymbolTable<string, string> &symbols)
+    {
+        vector<shared_ptr<ClassDeclaration>> classes = assembly->getClasses();
+        for (auto cls = classes.begin(); cls != classes.end(); ++cls)
+        {
+            string className = (*cls)->getName();
+            // Register the class itself
+            symbols.put("class:" + className, className);
+
+            // Register each field as "ClassName.fieldName" -> fieldType
+            vector<shared_ptr<Field>> fields = (*cls)->getFields();
+            for (auto field = fields.begin(); field != fields.end(); ++field)
+            {
+                string fieldKey = className + "." + (*field)->getName();
+                symbols.put(fieldKey, (*field)->getType());
+            }
+        }
     }
 
     void AnalysisPassManager::performPasses(shared_ptr<Assembly> assembly)
     {
         SymbolTable<string, string> symbols;
         defineFunctions(assembly, symbols);
+        defineClasses(assembly, symbols);
 
         vector<shared_ptr<Function>> functions = assembly->getFunctions();
         for (auto func = functions.begin(); func != functions.end(); ++func)

@@ -13,8 +13,8 @@ using namespace std;
 namespace tok
 {
     Tokenizer::Tokenizer(void) :
-        mOperators({ "+", "++", "-", "--", "*", "/", "%", "=", "!=", "<", ">", "==", ">=", "<=", "->" }),
-        mKeywords({ "if", "elif", "else", "for", "while", "module", "return", "fn", "let", "import" }),
+        mOperators({ "+", "++", "-", "--", "*", "/", "%", "=", "!=", "<", ">", "==", ">=", "<=", "->", ".", "&&", "||" }),
+        mKeywords({ "if", "elif", "else", "for", "while", "module", "return", "fn", "let", "import", "class", "public", "private", "alloc" }),
         mSpecialtokens({ '[', ']', '{', '}', '(', ')', ',', ';', ':' }),
         mBuffer(),
         mState(BufferState::EmptyState),
@@ -140,6 +140,7 @@ namespace tok
             else if (ch == '\"')
             {
                 mEndOfString = true;
+                insert = false;  // Don't include closing quote in string value
             }
             else if (ch == '\\')
             {
@@ -183,6 +184,11 @@ namespace tok
             // make the mBuffer mState appropriate for whatever we
             // are adding.
             mState = bufferType(ch);
+            // Don't include opening quote in string value
+            if (mState == BufferState::StringConstantState)
+            {
+                insert = false;
+            }
         }
         break;
         }
@@ -206,7 +212,11 @@ namespace tok
 
         mState = bufferType(ch);
         mBuffer.clear();
-        mBuffer.push_back(ch);
+        // Don't include opening quote in string buffer
+        if (mState != BufferState::StringConstantState)
+        {
+            mBuffer.push_back(ch);
+        }
 
         mReady = false;
 

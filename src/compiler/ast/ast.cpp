@@ -53,9 +53,10 @@ namespace ast
         out << "}";
     }
 
-    Assembly::Assembly(string name, vector<shared_ptr<Function>> functions) :
+    Assembly::Assembly(string name, vector<shared_ptr<Function>> functions, vector<shared_ptr<ClassDeclaration>> classes) :
         mName(name),
-        mFunctions(functions)
+        mFunctions(functions),
+        mClasses(classes)
     {
 
     }
@@ -63,6 +64,11 @@ namespace ast
     vector<shared_ptr<Function>> Assembly::getFunctions()
     {
         return mFunctions;
+    }
+
+    vector<shared_ptr<ClassDeclaration>> Assembly::getClasses()
+    {
+        return mClasses;
     }
 
     size_t Assembly::size()
@@ -84,6 +90,12 @@ namespace ast
     {
         out << "Assembly name: " << mName;
         ++indent;
+
+        for (auto it = mClasses.begin(); it < mClasses.end(); ++it)
+        {
+            newLine(out, indent);
+            (*it)->prettyPrint(out, indent);
+        }
 
         for (auto it = mFunctions.begin(); it < mFunctions.end(); ++it)
         {
@@ -566,6 +578,143 @@ namespace ast
         newLine(out, indent);
         out << "Block: ";
         mBlock->prettyPrint(out, indent);
+    }
+
+    // Field implementation
+    Field::Field(string name, string type, Visibility visibility) :
+        mName(name),
+        mType(type),
+        mVisibility(visibility)
+    {
+    }
+
+    string Field::getName() const
+    {
+        return mName;
+    }
+
+    string Field::getType() const
+    {
+        return mType;
+    }
+
+    Visibility Field::getVisibility() const
+    {
+        return mVisibility;
+    }
+
+    void Field::prettyPrint(ostream &out, size_t indent)
+    {
+        UNREFERENCED(indent);
+        out << mName << ": ";
+        out << (mVisibility == Visibility::Public ? "public " : "private ");
+        out << mType;
+    }
+
+    // ClassDeclaration implementation
+    ClassDeclaration::ClassDeclaration(string name, vector<shared_ptr<Field>> fields) :
+        mName(name),
+        mFields(fields)
+    {
+    }
+
+    string ClassDeclaration::getName() const
+    {
+        return mName;
+    }
+
+    vector<shared_ptr<Field>> ClassDeclaration::getFields() const
+    {
+        return mFields;
+    }
+
+    size_t ClassDeclaration::getFieldIndex(const string& fieldName) const
+    {
+        for (size_t i = 0; i < mFields.size(); ++i)
+        {
+            if (mFields[i]->getName() == fieldName)
+            {
+                return i;
+            }
+        }
+        return (size_t)-1; // Not found
+    }
+
+    void ClassDeclaration::prettyPrint(ostream &out, size_t indent)
+    {
+        out << "Class: " << mName;
+        ++indent;
+        newLine(out, indent);
+        out << "Fields:";
+        ++indent;
+        for (auto it = mFields.begin(); it != mFields.end(); ++it)
+        {
+            newLine(out, indent);
+            (*it)->prettyPrint(out, indent);
+        }
+    }
+
+    // AllocNode implementation
+    AllocNode::AllocNode(string typeName, vector<shared_ptr<Expression>> args) :
+        mTypeName(typeName),
+        mArgs(args)
+    {
+    }
+
+    string AllocNode::getTypeName() const
+    {
+        return mTypeName;
+    }
+
+    vector<shared_ptr<Expression>> AllocNode::getArgs() const
+    {
+        return mArgs;
+    }
+
+    ExpressionType AllocNode::getExpressionType()
+    {
+        return ExpressionType::Alloc;
+    }
+
+    void AllocNode::prettyPrint(ostream &out, size_t indent)
+    {
+        out << "alloc " << mTypeName << "(";
+        bool first = true;
+        for (auto it = mArgs.begin(); it != mArgs.end(); ++it)
+        {
+            if (!first) out << ", ";
+            first = false;
+            (*it)->prettyPrint(out, indent);
+        }
+        out << ")";
+    }
+
+    // MemberAccessNode implementation
+    MemberAccessNode::MemberAccessNode(shared_ptr<Expression> object, string memberName) :
+        mObject(object),
+        mMemberName(memberName)
+    {
+    }
+
+    shared_ptr<Expression> MemberAccessNode::getObject() const
+    {
+        return mObject;
+    }
+
+    string MemberAccessNode::getMemberName() const
+    {
+        return mMemberName;
+    }
+
+    ExpressionType MemberAccessNode::getExpressionType()
+    {
+        return ExpressionType::MemberAccess;
+    }
+
+    void MemberAccessNode::prettyPrint(ostream &out, size_t indent)
+    {
+        mObject->prettyPrint(out, indent);
+        out << "." << mMemberName;
     }
 
 }

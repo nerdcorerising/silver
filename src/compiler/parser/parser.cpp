@@ -223,6 +223,70 @@ namespace parse
         return shared_ptr<Function>(new Function(block, name, args, returnType));
     }
 
+    shared_ptr<Field> Parser::parseField()
+    {
+        // Parse: "name: visibility type;"
+        expectCurrentTokenType(TokenType::Identifier, "Expected field name");
+        string name = current().text();
+        advance();
+
+        expectCurrentTokenType(TokenType::Colon, "Expected ':' after field name");
+        advance();
+
+        // Parse visibility (public or private)
+        expectCurrentTokenType(TokenType::Keyword, "Expected 'public' or 'private'");
+        Visibility visibility;
+        if (current().text() == "public")
+        {
+            visibility = Visibility::Public;
+        }
+        else if (current().text() == "private")
+        {
+            visibility = Visibility::Private;
+        }
+        else
+        {
+            reportFatalError("Expected 'public' or 'private' for field visibility");
+            return nullptr;
+        }
+        advance();
+
+        // Parse type
+        expectCurrentTokenType(TokenType::Identifier, "Expected field type");
+        string type = current().text();
+        advance();
+
+        expectCurrentTokenType(TokenType::SemiColon, "Expected ';' after field declaration");
+        advance();
+
+        return shared_ptr<Field>(new Field(name, type, visibility));
+    }
+
+    shared_ptr<ClassDeclaration> Parser::parseClass()
+    {
+        expectCurrentTokenTypeAndText(TokenType::Keyword, "class", "Expected 'class' keyword");
+        advance();
+
+        expectCurrentTokenType(TokenType::Identifier, "Expected class name");
+        string name = current().text();
+        advance();
+
+        expectCurrentTokenType(TokenType::LeftBrace, "Expected '{' after class name");
+        advance();
+
+        vector<shared_ptr<Field>> fields;
+        while (current().type() != TokenType::RightBrace)
+        {
+            shared_ptr<Field> field = parseField();
+            fields.push_back(field);
+        }
+
+        expectCurrentTokenType(TokenType::RightBrace, "Expected '}' to close class");
+        advance();
+
+        return shared_ptr<ClassDeclaration>(new ClassDeclaration(name, fields));
+    }
+
     shared_ptr<BlockNode> Parser::parseBlock()
     {
         expectCurrentTokenType(TokenType::LeftBrace, "Expected curly brace to open block");
@@ -275,6 +339,17 @@ namespace parse
         shared_ptr<Expression> node;
         double dVal;
         int iVal;
+
+        // Handle alloc keyword
+        if (current().type() == TokenType::Keyword && current().text() == "alloc")
+        {
+            advance();
+            expectCurrentTokenType(TokenType::Identifier, "Expected type name after 'alloc'");
+            string typeName = current().text();
+            advance();
+            vector<shared_ptr<Expression>> args = parseFunctionArgs();
+            return shared_ptr<Expression>(new AllocNode(typeName, args));
+        }
 
         switch (current().type())
         {
@@ -352,21 +427,33 @@ namespace parse
         {
             return 0;
         }
-        else if (opStr == "<" || opStr == ">" || opStr == "==" || opStr == "!=" || opStr == ">=" || opStr == "<=")
+        else if (opStr == "||")
         {
             return 1;
         }
-        else if (opStr == "+" || opStr == "-")
+        else if (opStr == "&&")
         {
             return 2;
         }
-        else if (opStr == "*" || opStr == "/" || opStr == "%")
+        else if (opStr == "<" || opStr == ">" || opStr == "==" || opStr == "!=" || opStr == ">=" || opStr == "<=")
         {
             return 3;
         }
-        else if (opStr == "++" || opStr == "--")
+        else if (opStr == "+" || opStr == "-")
         {
             return 4;
+        }
+        else if (opStr == "*" || opStr == "/" || opStr == "%")
+        {
+            return 5;
+        }
+        else if (opStr == "++" || opStr == "--")
+        {
+            return 6;
+        }
+        else if (opStr == ".")
+        {
+            return 7;  // Highest precedence for member access
         }
         else
         {
@@ -383,6 +470,17 @@ namespace parse
         {
             Token op = current();
             advance();
+
+            // Special handling for member access operator
+            if (op.text() == ".")
+            {
+                expectCurrentTokenType(TokenType::Identifier, "Expected member name after '.'");
+                string memberName = current().text();
+                advance();
+                curr = shared_ptr<Expression>(new MemberAccessNode(curr, memberName));
+                continue;
+            }
+
             shared_ptr<Expression> next = makeNode();
 
             while (current().type() == TokenType::Operator && operatorPrecedence(current()) > operatorPrecedence(op))
@@ -570,6 +668,7 @@ namespace parse
     shared_ptr<Assembly> Parser::parse()
     {
         vector<shared_ptr<Function>> functions;
+        vector<shared_ptr<ClassDeclaration>> classes;
 
         while (mTokens.hasInput())
         {
@@ -578,6 +677,11 @@ namespace parse
                 vector<shared_ptr<Function>> expressions = parseImport();
                 functions.insert(functions.end(), expressions.begin(), expressions.end());
             }
+            else if (current().type() == TokenType::Keyword && current().text() == "class")
+            {
+                shared_ptr<ClassDeclaration> classDecl = parseClass();
+                classes.push_back(classDecl);
+            }
             else
             {
                 shared_ptr<Function> function = parseFunction();
@@ -585,6 +689,6 @@ namespace parse
             }
         }
 
-        return shared_ptr<Assembly>(new Assembly(mName, functions));
+        return shared_ptr<Assembly>(new Assembly(mName, functions, classes));
     }
 }

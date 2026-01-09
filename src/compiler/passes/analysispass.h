@@ -40,6 +40,7 @@ namespace analysis
 
         void performPassOnBlock(std::shared_ptr<ast::BlockNode> block, SymbolTable<std::string, std::string> &symbols);
         void defineFunctions(std::shared_ptr<ast::Assembly> assembly, SymbolTable<std::string, std::string> &symbols);
+        void defineClasses(std::shared_ptr<ast::Assembly> assembly, SymbolTable<std::string, std::string> &symbols);
 
     public:
         AnalysisPassManager(BuildType type);

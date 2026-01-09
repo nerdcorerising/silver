@@ -3,6 +3,8 @@
 #include "codegen.h"
 
 #include <string>
+#include <cstring>
+#include <cstdio>
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar/GVN.h"
@@ -38,10 +40,90 @@ namespace codegen
             llvm::IntegerType::getInt32Ty(mContext),  // return type: int
             printfParams,                              // params: const char*
             true);                                     // isVarArg: true
-        llvm::FunctionCallee callee = mModule->getOrInsertFunction("printf", printFType);
-        llvm::Value *funcVal = callee.getCallee();
-        llvm::Function *llvmFunc = llvm::cast<llvm::Function>(funcVal);
-        putFunc("printf", llvmFunc);
+        llvm::FunctionCallee printfCallee = mModule->getOrInsertFunction("printf", printFType);
+        llvm::Value *printfVal = printfCallee.getCallee();
+        llvm::Function *printfFunc = llvm::cast<llvm::Function>(printfVal);
+        putFunc("printf", printfFunc);
+
+        // Create __silver_strcmp function: i1 __silver_strcmp(i8* s1, i8* s2)
+        // Returns true (1) if strings are equal, false (0) otherwise
+        std::vector<llvm::Type*> strcmpParams;
+        strcmpParams.push_back(llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
+        strcmpParams.push_back(llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
+        llvm::FunctionType *strcmpFType = llvm::FunctionType::get(
+            llvm::Type::getInt1Ty(mContext),  // return type: i1 (bool)
+            strcmpParams,                      // params: i8*, i8*
+            false);                            // isVarArg: false
+
+        llvm::Function *strcmpFunc = llvm::Function::Create(
+            strcmpFType, llvm::Function::InternalLinkage, "__silver_strcmp", mModule);
+
+        // Mark as noinline to avoid optimization issues
+        strcmpFunc->addFnAttr(llvm::Attribute::NoInline);
+
+        // Create the function body using alloca instead of PHI to be more robust
+        llvm::BasicBlock *entryBB = llvm::BasicBlock::Create(mContext, "entry", strcmpFunc);
+        llvm::BasicBlock *loopBB = llvm::BasicBlock::Create(mContext, "loop", strcmpFunc);
+        llvm::BasicBlock *equalBB = llvm::BasicBlock::Create(mContext, "equal", strcmpFunc);
+        llvm::BasicBlock *notEqualBB = llvm::BasicBlock::Create(mContext, "notequal", strcmpFunc);
+
+        llvm::IRBuilder<> builder(mContext);
+
+        // Get function arguments
+        auto argIt = strcmpFunc->arg_begin();
+        llvm::Value *s1 = &(*argIt++);
+        llvm::Value *s2 = &(*argIt);
+        s1->setName("s1");
+        s2->setName("s2");
+
+        // Entry block - allocate index, initialize to 0, jump to loop
+        builder.SetInsertPoint(entryBB);
+        llvm::AllocaInst *idxPtr = builder.CreateAlloca(llvm::Type::getInt64Ty(mContext), nullptr, "idx_ptr");
+        builder.CreateStore(llvm::ConstantInt::get(llvm::Type::getInt64Ty(mContext), 0), idxPtr);
+        builder.CreateBr(loopBB);
+
+        // Loop block - load index, compare characters
+        builder.SetInsertPoint(loopBB);
+        llvm::Value *idx = builder.CreateLoad(llvm::Type::getInt64Ty(mContext), idxPtr, "idx");
+
+        // Load characters from both strings
+        llvm::Value *ptr1 = builder.CreateGEP(llvm::Type::getInt8Ty(mContext), s1, idx, "ptr1");
+        llvm::Value *ptr2 = builder.CreateGEP(llvm::Type::getInt8Ty(mContext), s2, idx, "ptr2");
+        llvm::Value *char1 = builder.CreateLoad(llvm::Type::getInt8Ty(mContext), ptr1, "char1");
+        llvm::Value *char2 = builder.CreateLoad(llvm::Type::getInt8Ty(mContext), ptr2, "char2");
+
+        // Compare characters - if not equal, return false
+        llvm::Value *charsEqual = builder.CreateICmpEQ(char1, char2, "chars_eq");
+
+        // Create blocks for after-comparison logic
+        llvm::BasicBlock *checkNullBB = llvm::BasicBlock::Create(mContext, "check_null", strcmpFunc);
+        builder.CreateCondBr(charsEqual, checkNullBB, notEqualBB);
+
+        // Check null block - if chars are equal, check if we hit null terminator
+        builder.SetInsertPoint(checkNullBB);
+        llvm::Value *isNull = builder.CreateICmpEQ(char1,
+            llvm::ConstantInt::get(llvm::Type::getInt8Ty(mContext), 0), "is_null");
+
+        // Create continue block for incrementing and looping
+        llvm::BasicBlock *continueBB = llvm::BasicBlock::Create(mContext, "continue", strcmpFunc);
+        builder.CreateCondBr(isNull, equalBB, continueBB);
+
+        // Continue block - increment index and loop back
+        builder.SetInsertPoint(continueBB);
+        llvm::Value *nextIdx = builder.CreateAdd(idx,
+            llvm::ConstantInt::get(llvm::Type::getInt64Ty(mContext), 1), "next_idx");
+        builder.CreateStore(nextIdx, idxPtr);
+        builder.CreateBr(loopBB);
+
+        // Equal block - return true
+        builder.SetInsertPoint(equalBB);
+        builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt1Ty(mContext), 1));
+
+        // Not equal block - return false
+        builder.SetInsertPoint(notEqualBB);
+        builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt1Ty(mContext), 0));
+
+        putFunc("__silver_strcmp", strcmpFunc);
     }
 
     void CodeGen::reportFatalError(string message)
@@ -78,7 +160,7 @@ namespace codegen
         }
         else if (str == "string")
         {
-            return llvm::PointerType::getUnqual(mContext);
+            return llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0);
         }
         else if (str == "void")
         {
@@ -86,7 +168,14 @@ namespace codegen
         }
         else
         {
-            reportFatalError("not implemented");
+            // Check if it's a user-defined class type
+            auto it = mStructTypes.find(str);
+            if (it != mStructTypes.end())
+            {
+                // Return pointer to struct type
+                return llvm::PointerType::get(it->second, 0);
+            }
+            reportFatalError("Unknown type: " + str);
             return nullptr;
         }
     }
@@ -103,6 +192,56 @@ namespace codegen
         }
 
         return types;
+    }
+
+    void CodeGen::generateClassTypes(shared_ptr<Assembly> assembly)
+    {
+        vector<shared_ptr<ClassDeclaration>> classes = assembly->getClasses();
+
+        for (auto it = classes.begin(); it != classes.end(); ++it)
+        {
+            shared_ptr<ClassDeclaration> classDecl = *it;
+            string className = classDecl->getName();
+
+            // Store the class declaration for later lookup
+            mClasses[className] = classDecl;
+
+            // Create field types
+            vector<llvm::Type *> fieldTypes;
+            vector<shared_ptr<Field>> fields = classDecl->getFields();
+            for (auto fieldIt = fields.begin(); fieldIt != fields.end(); ++fieldIt)
+            {
+                string fieldTypeName = (*fieldIt)->getType();
+                llvm::Type *fieldType;
+
+                // Handle primitive types directly (can't use stringToType yet for class types)
+                if (fieldTypeName == "int")
+                {
+                    fieldType = llvm::Type::getInt32Ty(mContext);
+                }
+                else if (fieldTypeName == "float")
+                {
+                    fieldType = llvm::Type::getDoubleTy(mContext);
+                }
+                else if (fieldTypeName == "string")
+                {
+                    fieldType = llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0);
+                }
+                else
+                {
+                    reportFatalError("Unsupported field type: " + fieldTypeName);
+                    return;
+                }
+                fieldTypes.push_back(fieldType);
+            }
+
+            // Create the struct type
+            llvm::StructType *structType = llvm::StructType::create(mContext, fieldTypes, className);
+            mStructTypes[className] = structType;
+
+            fprintf(stderr, "Codegen: Created struct type for class %s with %zu fields\n",
+                    className.c_str(), fieldTypes.size());
+        }
     }
 
     void CodeGen::generateAssembly(shared_ptr<Assembly> assembly)
@@ -152,6 +291,7 @@ namespace codegen
     {
         fprintf(stderr, "Codegen: Generating function %s\n", function->getName().c_str());
         mTable.enterContext();
+        mVariableTypes.enterContext();
         llvm::Function *llvmFunc = getFunc(function->getName());
         if (llvmFunc == nullptr)
         {
@@ -173,15 +313,33 @@ namespace codegen
             temp.CreateStore(&(*it), inst);
 
             mTable.put(a->getName(), inst);
+            mVariableTypes.put(a->getName(), a->getType());
         }
 
         generateBlock(function->getBlock(), llvmFunc);
+
+        // For void functions without explicit return, add implicit ret void
+        llvm::BasicBlock *lastBlock = &llvmFunc->back();
+        if (lastBlock->getTerminator() == nullptr)
+        {
+            if (function->getReturnType() == "void")
+            {
+                mBuilder.SetInsertPoint(lastBlock);
+                mBuilder.CreateRetVoid();
+            }
+            else
+            {
+                reportFatalError("Non-void function " + function->getName() + " missing return statement");
+            }
+        }
+
         fprintf(stderr, "Codegen: Running optimization passes on %s\n", function->getName().c_str());
 
         mFpm->run(*llvmFunc);
         fprintf(stderr, "Codegen: Finished function %s\n", function->getName().c_str());
 
         mTable.leaveContext();
+        mVariableTypes.leaveContext();
         return llvmFunc;
     }
 
@@ -225,6 +383,16 @@ namespace codegen
 
         llvm::Value *lhs = generateExpression(expression->getLhs());
 
+        // Handle logical operators (work with boolean/i1 values from comparisons)
+        if (op == "&&")
+        {
+            return mBuilder.CreateAnd(lhs, rhs, "and");
+        }
+        else if (op == "||")
+        {
+            return mBuilder.CreateOr(lhs, rhs, "or");
+        }
+
         if (lhs->getType() == llvm::Type::getDoubleTy(mContext) || rhs->getType() == llvm::Type::getDoubleTy(mContext))
         {
             return generateFloatingPointMath(op, lhs, rhs);
@@ -233,9 +401,42 @@ namespace codegen
         {
             return generateIntegerMath(op, lhs, rhs);
         }
+        else if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy())
+        {
+            // String comparison - call our generated strcmp function
+            if (op == "==" || op == "!=")
+            {
+                llvm::Function *strcmpFunc = getFunc("__silver_strcmp");
+                if (strcmpFunc == nullptr)
+                {
+                    reportFatalError("__silver_strcmp function not found");
+                    return nullptr;
+                }
+
+                // Call __silver_strcmp(lhs, rhs) - returns i1 (true if equal)
+                std::vector<llvm::Value*> args;
+                args.push_back(lhs);
+                args.push_back(rhs);
+                llvm::Value *result = mBuilder.CreateCall(strcmpFunc, args, "streq");
+
+                if (op == "==")
+                {
+                    return result;
+                }
+                else // op == "!="
+                {
+                    return mBuilder.CreateNot(result, "strne");
+                }
+            }
+            else
+            {
+                reportFatalError("Unsupported pointer operation: " + op);
+                return nullptr;
+            }
+        }
         else
         {
-            reportFatalError("need to support strings and such here eventually");
+            reportFatalError("Type mismatch in binary expression");
             return nullptr;
         }
 
@@ -387,6 +588,143 @@ namespace codegen
         return mBuilder.CreateCall(func, args);
     }
 
+    llvm::Value *CodeGen::generateAlloc(shared_ptr<AllocNode> allocNode)
+    {
+        string typeName = allocNode->getTypeName();
+
+        // Look up the struct type
+        auto structIt = mStructTypes.find(typeName);
+        if (structIt == mStructTypes.end())
+        {
+            reportFatalError("Unknown type in alloc: " + typeName);
+            return nullptr;
+        }
+        llvm::StructType *structType = structIt->second;
+
+        // Look up the class declaration for field info
+        auto classIt = mClasses.find(typeName);
+        if (classIt == mClasses.end())
+        {
+            reportFatalError("Unknown class in alloc: " + typeName);
+            return nullptr;
+        }
+        shared_ptr<ClassDeclaration> classDecl = classIt->second;
+        vector<shared_ptr<Field>> fields = classDecl->getFields();
+
+        // Allocate memory for the struct (stack allocation for now)
+        llvm::AllocaInst *structPtr = mBuilder.CreateAlloca(structType, nullptr, typeName + "_instance");
+
+        // Initialize fields with provided arguments
+        vector<shared_ptr<Expression>> args = allocNode->getArgs();
+        if (args.size() != fields.size())
+        {
+            reportFatalError("Alloc argument count doesn't match field count for " + typeName);
+            return nullptr;
+        }
+
+        for (size_t i = 0; i < args.size(); ++i)
+        {
+            // Generate the value for this field
+            llvm::Value *fieldValue = generateExpression(args[i]);
+
+            // Get pointer to the field using GEP
+            llvm::Value *fieldPtr = mBuilder.CreateStructGEP(structType, structPtr, i, fields[i]->getName() + "_ptr");
+
+            // Store the value
+            mBuilder.CreateStore(fieldValue, fieldPtr);
+        }
+
+        return structPtr;
+    }
+
+    llvm::Value *CodeGen::generateMemberAccess(shared_ptr<MemberAccessNode> memberNode)
+    {
+        // Get the object expression - should be an identifier for a struct variable
+        shared_ptr<Expression> objectExpr = memberNode->getObject();
+
+        // We need to find the type name of the object
+        string typeName;
+        llvm::Value *objectPtr;
+
+        if (objectExpr->getExpressionType() == ExpressionType::Identifier)
+        {
+            shared_ptr<IdentifierNode> ident = dynamic_pointer_cast<IdentifierNode>(objectExpr);
+            string varName = ident->getValue();
+
+            // Look up the type from our tracking table
+            typeName = mVariableTypes.get(varName);
+            if (typeName.empty())
+            {
+                reportFatalError("Unknown variable in member access: " + varName);
+                return nullptr;
+            }
+
+            // Load the pointer from the variable
+            llvm::AllocaInst *inst = mTable.get(varName);
+            objectPtr = mBuilder.CreateLoad(inst->getAllocatedType(), inst);
+        }
+        else
+        {
+            reportFatalError("Member access on non-identifier expression not yet supported");
+            return nullptr;
+        }
+
+        // Look up the struct type
+        auto structIt = mStructTypes.find(typeName);
+        if (structIt == mStructTypes.end())
+        {
+            reportFatalError("Unknown struct type in member access: " + typeName);
+            return nullptr;
+        }
+        llvm::StructType *structType = structIt->second;
+
+        // Look up the class declaration
+        auto classIt = mClasses.find(typeName);
+        if (classIt == mClasses.end())
+        {
+            reportFatalError("Unknown class in member access: " + typeName);
+            return nullptr;
+        }
+        shared_ptr<ClassDeclaration> classDecl = classIt->second;
+
+        // Find the field index
+        string memberName = memberNode->getMemberName();
+        size_t fieldIndex = classDecl->getFieldIndex(memberName);
+        if (fieldIndex == (size_t)-1)
+        {
+            reportFatalError("Unknown field: " + memberName + " in class " + typeName);
+            return nullptr;
+        }
+
+        // Get field type
+        vector<shared_ptr<Field>> fields = classDecl->getFields();
+        string fieldTypeName = fields[fieldIndex]->getType();
+        llvm::Type *fieldType;
+        if (fieldTypeName == "int")
+        {
+            fieldType = llvm::Type::getInt32Ty(mContext);
+        }
+        else if (fieldTypeName == "float")
+        {
+            fieldType = llvm::Type::getDoubleTy(mContext);
+        }
+        else if (fieldTypeName == "string")
+        {
+            fieldType = llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0);
+        }
+        else
+        {
+            reportFatalError("Unsupported field type in member access: " + fieldTypeName);
+            return nullptr;
+        }
+
+        // Generate GEP to get pointer to field
+        llvm::Value *fieldPtr = mBuilder.CreateStructGEP(structType, objectPtr, fieldIndex, memberName + "_ptr");
+
+        // Load the field value
+        return mBuilder.CreateLoad(fieldType, fieldPtr, memberName);
+    }
+
     void CodeGen::generateIf(shared_ptr<IfBlockNode> ifNode)
     {
         llvm::BasicBlock *preheaderBlock = mBuilder.GetInsertBlock();
@@ -515,7 +853,8 @@ namespace codegen
         case ExpressionType::StringLiteral:
         {
             shared_ptr<StringLiteralNode> str = dynamic_pointer_cast<StringLiteralNode>(expression);
-            return llvm::ConstantDataArray::getString(mContext, str->getValue());
+            // Create a global string constant and return a pointer to it
+            return mBuilder.CreateGlobalStringPtr(str->getValue(), "str");
         }
         case ExpressionType::UnaryOperator:
         {
@@ -537,16 +876,26 @@ namespace codegen
         case ExpressionType::Declaration:
         {
             shared_ptr<DeclarationNode> decl = dynamic_pointer_cast<DeclarationNode>(expression);
-            fprintf(stderr, "Codegen: Declaration %s type=%s\n", decl->getName().c_str(), decl->getTypeName().c_str());
+            shared_ptr<Expression> initExpr = decl->getExpression();
 
-            ASSERT(decl->getTypeName() != "");
-            llvm::Type *type = stringToType(decl->getTypeName());
+            // Determine the type - either from explicit type or from alloc expression
+            string typeName = decl->getTypeName();
+            if (typeName.empty() && initExpr != nullptr && initExpr->getExpressionType() == ExpressionType::Alloc)
+            {
+                shared_ptr<AllocNode> allocNode = dynamic_pointer_cast<AllocNode>(initExpr);
+                typeName = allocNode->getTypeName();
+            }
+
+            fprintf(stderr, "Codegen: Declaration %s type=%s\n", decl->getName().c_str(), typeName.c_str());
+
+            ASSERT(typeName != "");
+            llvm::Type *type = stringToType(typeName);
 
             llvm::AllocaInst *inst = mBuilder.CreateAlloca(type, 0, decl->getName());
             mTable.put(decl->getName(), inst);
+            mVariableTypes.put(decl->getName(), typeName);
 
             // If declaration has an initializer, store the value
-            shared_ptr<Expression> initExpr = decl->getExpression();
             if (initExpr != nullptr)
             {
                 fprintf(stderr, "Codegen: Generating initializer for %s\n", decl->getName().c_str());
@@ -609,6 +958,16 @@ namespace codegen
             return nullptr;
         }
         break;
+        case ExpressionType::Alloc:
+        {
+            shared_ptr<AllocNode> allocNode = dynamic_pointer_cast<AllocNode>(expression);
+            return generateAlloc(allocNode);
+        }
+        case ExpressionType::MemberAccess:
+        {
+            shared_ptr<MemberAccessNode> memberNode = dynamic_pointer_cast<MemberAccessNode>(expression);
+            return generateMemberAccess(memberNode);
+        }
         default:
         {
             reportFatalError("Unknown expression type in codegen");
@@ -635,6 +994,7 @@ namespace codegen
     llvm::Value *CodeGen::generateIntoBlock(llvm::BasicBlock *basicBlock, shared_ptr<BlockNode> block)
     {
         mTable.enterContext();
+        mVariableTypes.enterContext();
 
         mBuilder.SetInsertPoint(basicBlock);
 
@@ -646,6 +1006,7 @@ namespace codegen
         }
 
         mTable.leaveContext();
+        mVariableTypes.leaveContext();
         return basicBlock;
 
     }
@@ -663,7 +1024,8 @@ namespace codegen
         // Promote allocas to registers.
         mFpm->add(llvm::createPromoteMemoryToRegisterPass());
         // Do simple "peephole" optimizations and bit-twiddling optzns.
-        mFpm->add(llvm::createInstructionCombiningPass());
+        // NOTE: Disabled because it converts printf to puts which JIT can't resolve
+        // mFpm->add(llvm::createInstructionCombiningPass());
         // Reassociate expressions.
         mFpm->add(llvm::createReassociatePass());
         // Eliminate Common SubExpressions.
@@ -673,6 +1035,7 @@ namespace codegen
 
         mFpm->doInitialization();
 
+        generateClassTypes(assembly);
         generateAssembly(assembly);
         fprintf(stderr, "Codegen: Assembly generation complete, printing module\n");
         mModule->print(llvm::errs(), nullptr);
@@ -696,7 +1059,16 @@ namespace codegen
             return -1;
         }
 
-        llvm::ExecutionEngine *EE = llvm::EngineBuilder(unique_ptr<llvm::Module>(mModule)).create();
+        std::string errStr;
+        llvm::ExecutionEngine *EE = llvm::EngineBuilder(unique_ptr<llvm::Module>(mModule))
+            .setErrorStr(&errStr)
+            .create();
+
+        if (!EE) {
+            cerr << "Failed to create ExecutionEngine: " << errStr << endl;
+            return -1;
+        }
+
         mModule = nullptr; // now owned by unique_ptr above;
 
         cout << "calling main()" << endl;

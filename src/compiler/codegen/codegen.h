@@ -12,6 +12,7 @@
 #pragma warning(disable:4291)
 #pragma warning(disable:4141)
 #pragma warning(disable:4624)
+#pragma warning(disable:4244)  // conversion from 'uint64_t' to 'uint32_t', LLVM internal
 #include "llvm/Analysis/Passes.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
@@ -30,6 +31,7 @@
 #include "llvm/ExecutionEngine/GenericValue.h"
 #include "llvm/ExecutionEngine/Interpreter.h"
 #include "llvm/Support/ManagedStatic.h"
+#include "llvm/Support/DynamicLibrary.h"
 #pragma warning (pop)
 
 #include "parser/parser.h"
@@ -46,7 +48,10 @@ namespace codegen
         std::string mOutFile;
         std::shared_ptr<ast::Assembly> mTree;
         SymbolTable<std::string, llvm::AllocaInst *> mTable;
+        SymbolTable<std::string, std::string> mVariableTypes;  // Track type names for variables
         std::map<std::string, llvm::Function *> mFunctions;
+        std::map<std::string, llvm::StructType *> mStructTypes;
+        std::map<std::string, std::shared_ptr<ast::ClassDeclaration>> mClasses;
 
         llvm::LLVMContext mContext;
         llvm::Module *mModule;
@@ -64,6 +69,7 @@ namespace codegen
         llvm::Type *stringToType(std::string str);
         std::vector<llvm::Type *> getFunctionArgumentTypes(std::shared_ptr<ast::Function> function);
 
+        void generateClassTypes(std::shared_ptr<ast::Assembly> assembly);
         void generateAssembly(std::shared_ptr<ast::Assembly> assembly);
         llvm::Function *generateFunctionPrototype(std::shared_ptr<ast::Function> function);
         llvm::Value *generateFunction(std::shared_ptr<ast::Function> function);
@@ -72,6 +78,8 @@ namespace codegen
         llvm::Value *generateIntegerMath(std::string op, llvm::Value *lhs, llvm::Value *rhs);
         llvm::Value *generateFloatingPointMath(std::string op, llvm::Value *lhs, llvm::Value *rhs);
         llvm::Value *generateFunctionCall(std::shared_ptr<ast::FunctionCallNode> expression);
+        llvm::Value *generateAlloc(std::shared_ptr<ast::AllocNode> allocNode);
+        llvm::Value *generateMemberAccess(std::shared_ptr<ast::MemberAccessNode> memberNode);
         void generateIf(std::shared_ptr<ast::IfBlockNode> ifNode);
         void generateWhile(std::shared_ptr<ast::WhileNode> whileNode);
         llvm::Value *generateBlock(std::shared_ptr<ast::BlockNode> block, llvm::Function * llvmFunc);
