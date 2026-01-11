@@ -298,16 +298,28 @@ namespace parse
         advance();
 
         vector<shared_ptr<Field>> fields;
+        vector<shared_ptr<Function>> methods;
+
         while (current().type() != TokenType::RightBrace)
         {
-            shared_ptr<Field> field = parseField();
-            fields.push_back(field);
+            // Check if this is a method definition (starts with 'fn')
+            if (current().type() == TokenType::Keyword && current().text() == "fn")
+            {
+                shared_ptr<Function> method = parseFunction(false);
+                methods.push_back(method);
+            }
+            else
+            {
+                // Otherwise it's a field
+                shared_ptr<Field> field = parseField();
+                fields.push_back(field);
+            }
         }
 
         expectCurrentTokenType(TokenType::RightBrace, "Expected '}' to close class");
         advance();
 
-        return shared_ptr<ClassDeclaration>(new ClassDeclaration(name, fields));
+        return shared_ptr<ClassDeclaration>(new ClassDeclaration(name, fields, methods));
     }
 
     shared_ptr<NamespaceDeclaration> Parser::parseNamespace()
@@ -448,6 +460,36 @@ namespace parse
             return shared_ptr<Expression>(new AllocNode(typeName, args, line, col));
         }
 
+        // Handle 'this' keyword - treat as special identifier
+        if (current().type() == TokenType::Keyword && current().text() == "this")
+        {
+            node = shared_ptr<Expression>(new IdentifierNode("this", line, col));
+            advance();
+
+            // Check for member access or method call on 'this'
+            if (current().type() == TokenType::Operator && current().text() == ".")
+            {
+                advance();  // skip dot
+                expectCurrentTokenType(TokenType::Identifier, "Expected member name after 'this.'");
+                string memberName = current().text();
+                advance();
+
+                // Check if this is a method call
+                if (current().type() == TokenType::OpenParens)
+                {
+                    vector<shared_ptr<Expression>> args = parseFunctionArgs();
+                    return shared_ptr<Expression>(new MethodCallNode(node, memberName, args, line, col));
+                }
+                else
+                {
+                    // It's field access
+                    return shared_ptr<Expression>(new MemberAccessNode(node, memberName, line, col));
+                }
+            }
+
+            return node;
+        }
+
         switch (current().type())
         {
         case TokenType::IntLiteral:
@@ -493,62 +535,87 @@ namespace parse
             break;
         case TokenType::Identifier:
         {
-            // Check for qualified call: Identifier.something.func()
+            // Check for qualified call or method call: Identifier.something[.more][(args)]
             if (lookAhead().type() == TokenType::Operator && lookAhead().text() == ".")
             {
                 // Collect the dotted path
-                string path = current().text();
+                string firstIdent = current().text();
                 advance();  // skip first identifier
 
-                while (current().type() == TokenType::Operator && current().text() == ".")
+                // Check for simple identifier.name pattern
+                advance();  // skip dot
+                expectCurrentTokenType(TokenType::Identifier, "Expected identifier after '.'");
+                string secondIdent = current().text();
+                advance();
+
+                // Check if this is a call (method or namespace)
+                if (current().type() == TokenType::OpenParens)
                 {
-                    advance();  // skip dot
-                    expectCurrentTokenType(TokenType::Identifier, "Expected identifier after '.'");
-                    path += "." + current().text();
-                    advance();
+                    // Simple identifier.name() - could be method call or namespace call
+                    // Create MethodCallNode; analysis pass will validate if it's actually a namespace
+                    shared_ptr<Expression> objExpr = shared_ptr<Expression>(new IdentifierNode(firstIdent, line, col));
+                    vector<shared_ptr<Expression>> args = parseFunctionArgs();
+                    node = shared_ptr<Expression>(new MethodCallNode(objExpr, secondIdent, args, line, col));
+                }
+                else if (current().type() == TokenType::Operator && current().text() == ".")
+                {
+                    // Multi-part path: continue collecting for namespace qualified calls
+                    string path = firstIdent + "." + secondIdent;
 
-                    // Check if this might be a function call
-                    if (current().type() == TokenType::OpenParens)
+                    while (current().type() == TokenType::Operator && current().text() == ".")
                     {
-                        // It's a qualified call: path ends with function name
-                        // Split path into namespace path and function name
-                        size_t lastDot = path.rfind('.');
-                        string namespacePath = path.substr(0, lastDot);
-                        string funcName = path.substr(lastDot + 1);
+                        advance();  // skip dot
+                        expectCurrentTokenType(TokenType::Identifier, "Expected identifier after '.'");
+                        path += "." + current().text();
+                        advance();
 
-                        vector<shared_ptr<Expression>> args = parseFunctionArgs();
-                        node = shared_ptr<Expression>(new QualifiedCallNode(namespacePath, funcName, args, line, col));
-                        break;
+                        // Check if this is a function call
+                        if (current().type() == TokenType::OpenParens)
+                        {
+                            // It's a qualified call: path ends with function name
+                            size_t lastDot = path.rfind('.');
+                            string namespacePath = path.substr(0, lastDot);
+                            string funcName = path.substr(lastDot + 1);
+
+                            vector<shared_ptr<Expression>> args = parseFunctionArgs();
+                            node = shared_ptr<Expression>(new QualifiedCallNode(namespacePath, funcName, args, line, col));
+                            break;
+                        }
+                    }
+
+                    // If we didn't find a function call, it's chained member access
+                    if (node == nullptr)
+                    {
+                        // Parse the path into chained member access
+                        size_t pos = 0;
+                        size_t dotPos = path.find('.');
+                        string firstPart = path.substr(0, dotPos);
+                        node = shared_ptr<Expression>(new IdentifierNode(firstPart, line, col));
+
+                        pos = dotPos + 1;
+                        while (pos < path.size())
+                        {
+                            dotPos = path.find('.', pos);
+                            string part;
+                            if (dotPos == string::npos)
+                            {
+                                part = path.substr(pos);
+                                pos = path.size();
+                            }
+                            else
+                            {
+                                part = path.substr(pos, dotPos - pos);
+                                pos = dotPos + 1;
+                            }
+                            node = shared_ptr<Expression>(new MemberAccessNode(node, part, line, col));
+                        }
                     }
                 }
-
-                // If we didn't find a function call, it's member access
-                // Create chained MemberAccessNode
-                if (node == nullptr)
+                else
                 {
-                    // Parse the path into chained member access
-                    size_t pos = 0;
-                    size_t dotPos = path.find('.');
-                    string firstPart = path.substr(0, dotPos);
-                    node = shared_ptr<Expression>(new IdentifierNode(firstPart, line, col));
-
-                    pos = dotPos + 1;
-                    while (pos < path.size())
-                    {
-                        dotPos = path.find('.', pos);
-                        string part;
-                        if (dotPos == string::npos)
-                        {
-                            part = path.substr(pos);
-                            pos = path.size();
-                        }
-                        else
-                        {
-                            part = path.substr(pos, dotPos - pos);
-                            pos = dotPos + 1;
-                        }
-                        node = shared_ptr<Expression>(new MemberAccessNode(node, part, line, col));
-                    }
+                    // identifier.identifier (no call, no more dots) - member access
+                    shared_ptr<Expression> objExpr = shared_ptr<Expression>(new IdentifierNode(firstIdent, line, col));
+                    node = shared_ptr<Expression>(new MemberAccessNode(objExpr, secondIdent, line, col));
                 }
             }
             else if (lookAhead().type() == TokenType::OpenParens)
@@ -713,6 +780,14 @@ namespace parse
             else if (curr.text() == "if")
             {
                 return parseIf();
+            }
+            else if (curr.text() == "this")
+            {
+                // 'this' is a keyword but behaves like an identifier expression
+                shared_ptr<Expression> statement = parseStatement();
+                expectCurrentTokenType(TokenType::SemiColon, "Expected semicolon after statement.");
+                advance();
+                return statement;
             }
             else
             {

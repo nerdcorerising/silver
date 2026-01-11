@@ -14,7 +14,7 @@ namespace tok
 {
     Tokenizer::Tokenizer(void) :
         mOperators({ "+", "++", "-", "--", "*", "/", "%", "=", "!=", "<", ">", "==", ">=", "<=", "->", ".", "&&", "||" }),
-        mKeywords({ "if", "elif", "else", "for", "while", "module", "return", "fn", "let", "import", "class", "public", "private", "alloc", "namespace", "local" }),
+        mKeywords({ "if", "elif", "else", "for", "while", "module", "return", "fn", "let", "import", "class", "public", "private", "alloc", "namespace", "local", "this" }),
         mSpecialtokens({ '[', ']', '{', '}', '(', ')', ',', ';', ':' }),
         mBuffer(),
         mState(BufferState::EmptyState),

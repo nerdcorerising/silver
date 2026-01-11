@@ -36,7 +36,8 @@ namespace ast
         Block,
         Alloc,
         MemberAccess,
-        QualifiedCall
+        QualifiedCall,
+        MethodCall
     };
 
     // Visibility for class fields
@@ -376,13 +377,17 @@ namespace ast
     private:
         std::string mName;
         std::vector<std::shared_ptr<Field>> mFields;
+        std::vector<std::shared_ptr<Function>> mMethods;
 
     public:
-        ClassDeclaration(std::string name, std::vector<std::shared_ptr<Field>> fields);
+        ClassDeclaration(std::string name,
+                         std::vector<std::shared_ptr<Field>> fields,
+                         std::vector<std::shared_ptr<Function>> methods = {});
         virtual ~ClassDeclaration() = default;
 
         std::string getName() const;
         std::vector<std::shared_ptr<Field>> getFields() const;
+        std::vector<std::shared_ptr<Function>> getMethods() const;
         size_t getFieldIndex(const std::string& fieldName) const;
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
     };
@@ -417,6 +422,27 @@ namespace ast
 
         std::shared_ptr<Expression> getObject() const;
         std::string getMemberName() const;
+        virtual ExpressionType getExpressionType() override;
+        virtual void prettyPrint(std::ostream &out, size_t indent) override;
+    };
+
+    // Represents a method call: "obj.method(args...)"
+    class MethodCallNode : public Expression
+    {
+    private:
+        std::shared_ptr<Expression> mObject;
+        std::string mMethodName;
+        std::vector<std::shared_ptr<Expression>> mArgs;
+
+    public:
+        MethodCallNode(std::shared_ptr<Expression> object, std::string methodName,
+                       std::vector<std::shared_ptr<Expression>> args, int line = 0, int col = 0);
+        virtual ~MethodCallNode() = default;
+
+        std::shared_ptr<Expression> getObject() const;
+        std::string getMethodName() const;
+        std::vector<std::shared_ptr<Expression>> getArgs() const;
+        size_t argCount() const;
         virtual ExpressionType getExpressionType() override;
         virtual void prettyPrint(std::ostream &out, size_t indent) override;
     };

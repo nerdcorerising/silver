@@ -105,6 +105,14 @@ namespace analysis
                 string fieldKey = className + "." + (*field)->getName();
                 symbols.put(fieldKey, (*field)->getType());
             }
+
+            // Register each method as "method:ClassName.methodName()" -> returnType
+            vector<shared_ptr<Function>> methods = (*cls)->getMethods();
+            for (auto method = methods.begin(); method != methods.end(); ++method)
+            {
+                string methodKey = "method:" + className + "." + (*method)->getName() + "()";
+                symbols.put(methodKey, (*method)->getReturnType());
+            }
         }
     }
 
@@ -210,6 +218,32 @@ namespace analysis
         {
             shared_ptr<BlockNode> block = (*func)->getBlock();
             performPassOnBlock(block, symbols);
+        }
+
+        // Process class methods
+        vector<shared_ptr<ClassDeclaration>> classes = assembly->getClasses();
+        for (auto cls = classes.begin(); cls != classes.end(); ++cls)
+        {
+            string className = (*cls)->getName();
+            vector<shared_ptr<Function>> methods = (*cls)->getMethods();
+            for (auto method = methods.begin(); method != methods.end(); ++method)
+            {
+                // Enter a new context for this method with 'this' and parameters defined
+                symbols.enterContext();
+                symbols.put("this", className);
+
+                // Register method parameters
+                vector<shared_ptr<Argument>> args = (*method)->getArguments();
+                for (auto arg = args.begin(); arg != args.end(); ++arg)
+                {
+                    symbols.put((*arg)->getName(), (*arg)->getType());
+                }
+
+                shared_ptr<BlockNode> block = (*method)->getBlock();
+                performPassOnBlock(block, symbols);
+
+                symbols.leaveContext();
+            }
         }
 
         // Process namespace functions

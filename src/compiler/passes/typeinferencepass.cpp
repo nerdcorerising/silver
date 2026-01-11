@@ -147,6 +147,52 @@ namespace analysis
             return type;
         }
         break;
+        case ExpressionType::MethodCall:
+        {
+            shared_ptr<MethodCallNode> call = dynamic_pointer_cast<MethodCallNode>(expression);
+
+            // Get the type of the object the method is being called on
+            string objectType = getTypeForExpression(call->getObject(), symbols);
+
+            // Check if this is actually a namespace call (object is an identifier matching a namespace)
+            shared_ptr<IdentifierNode> objIdent = dynamic_pointer_cast<IdentifierNode>(call->getObject());
+            if (objIdent != nullptr)
+            {
+                string nsKey = "namespace:" + objIdent->getValue();
+                if (!symbols.get(nsKey).empty())
+                {
+                    // It's a namespace call, look up "Namespace.funcName()"
+                    string funcKey = objIdent->getValue() + "." + call->getMethodName() + "()";
+                    string type = symbols.get(funcKey);
+                    if (type.empty())
+                    {
+                        // Check for local function
+                        string localFuncKey = "local:" + funcKey;
+                        string localType = symbols.get(localFuncKey);
+                        if (!localType.empty())
+                        {
+                            OPTIMIZATION_ERROR_AT(expression, "Function " + objIdent->getValue() + "." + call->getMethodName() +
+                                " is local and can only be called from within its namespace");
+                        }
+                        else
+                        {
+                            OPTIMIZATION_ERROR_AT(expression, "Unknown function: " + objIdent->getValue() + "." + call->getMethodName());
+                        }
+                    }
+                    return type;
+                }
+            }
+
+            // It's a method call on an object, look up "method:ClassName.methodName()"
+            string methodKey = "method:" + objectType + "." + call->getMethodName() + "()";
+            string type = symbols.get(methodKey);
+            if (type.empty())
+            {
+                OPTIMIZATION_ERROR_AT(expression, "Unknown method: " + call->getMethodName() + " on type " + objectType);
+            }
+            return type;
+        }
+        break;
         default:
         {
             OPTIMIZATION_ERROR_AT(expression, "Unknown type in getTypeForExpression");

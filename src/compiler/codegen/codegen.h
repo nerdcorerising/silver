@@ -70,6 +70,10 @@ namespace codegen
         // Current namespace path for resolving local function calls
         std::string mCurrentNamespace;
 
+        // Current class name and 'this' pointer for method generation
+        std::string mCurrentClass;
+        llvm::Value* mThisPtr;
+
         bool mOptimize;
         llvm::LLVMContext mContext;
         llvm::Module *mModule;
@@ -102,6 +106,8 @@ namespace codegen
         llvm::Value *generateQualifiedCall(std::shared_ptr<ast::QualifiedCallNode> expression);
         llvm::Value *generateAlloc(std::shared_ptr<ast::AllocNode> allocNode);
         llvm::Value *generateMemberAccess(std::shared_ptr<ast::MemberAccessNode> memberNode);
+        llvm::Value *generateMethodCall(std::shared_ptr<ast::MethodCallNode> call);
+        void generateClassMethods(std::shared_ptr<ast::ClassDeclaration> classDecl);
         void generateNamespacePrototypes(std::shared_ptr<ast::NamespaceDeclaration> ns, std::string parentPath);
         void generateNamespaceBodies(std::shared_ptr<ast::NamespaceDeclaration> ns, std::string parentPath);
         std::string mangleName(std::string namespacePath, std::string funcName);

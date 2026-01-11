@@ -64,6 +64,8 @@ namespace codegen
         mTree(tree),
         mTable(),
         mFunctions(),
+        mCurrentClass(),
+        mThisPtr(nullptr),
         mOptimize(false),
         mContext(),
         mModule(nullptr),
@@ -382,6 +384,13 @@ namespace codegen
             generateNamespacePrototypes(*it, "");
         }
 
+        // Generate class method prototypes and bodies
+        vector<shared_ptr<ClassDeclaration>> classes = assembly->getClasses();
+        for (auto it = classes.begin(); it != classes.end(); ++it)
+        {
+            generateClassMethods(*it);
+        }
+
         // Generate all function bodies (regular functions)
         for (auto it = functions.begin(); it != functions.end(); ++it)
         {
@@ -639,7 +648,8 @@ namespace codegen
                 return nullptr;
             }
 
-            if (binLhs->getExpressionType() != Identifier && binLhs->getExpressionType() != Declaration)
+            if (binLhs->getExpressionType() != Identifier && binLhs->getExpressionType() != Declaration
+                && binLhs->getExpressionType() != MemberAccess)
             {
                 reportFatalError("Cannot assign a value to a non-identifier type.", expression);
                 return nullptr;
@@ -650,6 +660,66 @@ namespace codegen
             {
                 shared_ptr<IdentifierNode> castLhs = dynamic_pointer_cast<IdentifierNode>(binLhs);
                 inst = mTable.get(castLhs->getValue());
+            }
+            else if (binLhs->getExpressionType() == MemberAccess)
+            {
+                // Generate pointer to member field for assignment
+                shared_ptr<MemberAccessNode> memberNode = dynamic_pointer_cast<MemberAccessNode>(binLhs);
+                shared_ptr<Expression> objectExpr = memberNode->getObject();
+
+                string typeName;
+                llvm::Value *objectPtr;
+
+                if (objectExpr->getExpressionType() == ExpressionType::Identifier)
+                {
+                    shared_ptr<IdentifierNode> ident = dynamic_pointer_cast<IdentifierNode>(objectExpr);
+                    string varName = ident->getValue();
+
+                    // Handle 'this' specially
+                    if (varName == "this" && mThisPtr != nullptr)
+                    {
+                        objectPtr = mThisPtr;
+                        typeName = mCurrentClass;
+                    }
+                    else
+                    {
+                        typeName = mVariableTypes.get(varName);
+                        llvm::AllocaInst *alloca = mTable.get(varName);
+                        objectPtr = mBuilder.CreateLoad(alloca->getAllocatedType(), alloca);
+                    }
+                }
+                else
+                {
+                    reportFatalError("Member assignment on non-identifier expression not yet supported", expression);
+                    return nullptr;
+                }
+
+                // Look up struct type and field index
+                auto structIt = mStructTypes.find(typeName);
+                if (structIt == mStructTypes.end())
+                {
+                    reportFatalError("Unknown struct type in member assignment: " + typeName, expression);
+                    return nullptr;
+                }
+                llvm::StructType *structType = structIt->second;
+
+                auto classIt = mClasses.find(typeName);
+                if (classIt == mClasses.end())
+                {
+                    reportFatalError("Unknown class in member assignment: " + typeName, expression);
+                    return nullptr;
+                }
+
+                string memberName = memberNode->getMemberName();
+                size_t fieldIndex = classIt->second->getFieldIndex(memberName);
+                if (fieldIndex == (size_t)-1)
+                {
+                    reportFatalError("Unknown field: " + memberName + " in class " + typeName, expression);
+                    return nullptr;
+                }
+
+                // Generate GEP to get pointer to field
+                inst = mBuilder.CreateStructGEP(structType, objectPtr, static_cast<unsigned>(fieldIndex), memberName + "_ptr");
             }
             else // if(binLhs->getType() == Declaration)
             {
@@ -1001,17 +1071,26 @@ namespace codegen
             shared_ptr<IdentifierNode> ident = dynamic_pointer_cast<IdentifierNode>(objectExpr);
             string varName = ident->getValue();
 
-            // Look up the type from our tracking table
-            typeName = mVariableTypes.get(varName);
-            if (typeName.empty())
+            // Handle 'this' specially - it's already a pointer, not an alloca
+            if (varName == "this" && mThisPtr != nullptr)
             {
-                reportFatalError("Unknown variable in member access: " + varName, memberNode);
-                return nullptr;
+                objectPtr = mThisPtr;
+                typeName = mCurrentClass;
             }
+            else
+            {
+                // Look up the type from our tracking table
+                typeName = mVariableTypes.get(varName);
+                if (typeName.empty())
+                {
+                    reportFatalError("Unknown variable in member access: " + varName, memberNode);
+                    return nullptr;
+                }
 
-            // Load the pointer from the variable
-            llvm::AllocaInst *inst = mTable.get(varName);
-            objectPtr = mBuilder.CreateLoad(inst->getAllocatedType(), inst);
+                // Load the pointer from the variable
+                llvm::AllocaInst *inst = mTable.get(varName);
+                objectPtr = mBuilder.CreateLoad(inst->getAllocatedType(), inst);
+            }
         }
         else
         {
@@ -1073,6 +1152,160 @@ namespace codegen
 
         // Load the field value
         return mBuilder.CreateLoad(fieldType, fieldPtr, memberName);
+    }
+
+    void CodeGen::generateClassMethods(shared_ptr<ClassDeclaration> classDecl)
+    {
+        string className = classDecl->getName();
+        vector<shared_ptr<Function>> methods = classDecl->getMethods();
+
+        // Look up the struct type for this class
+        auto structIt = mStructTypes.find(className);
+        if (structIt == mStructTypes.end())
+        {
+            reportFatalError("Unknown class in method generation: " + className);
+            return;
+        }
+
+        for (auto method = methods.begin(); method != methods.end(); ++method)
+        {
+            // Create mangled name: ClassName_methodName
+            string mangledName = className + "_" + (*method)->getName();
+
+            // Create function type with implicit 'this' parameter as first argument
+            llvm::Type *retType = stringToType((*method)->getReturnType());
+            vector<llvm::Type *> argTypes;
+            argTypes.push_back(llvm::PointerType::get(mContext, 0));  // 'this' pointer
+
+            // Add explicit parameters
+            vector<shared_ptr<Argument>> args = (*method)->getArguments();
+            for (auto arg = args.begin(); arg != args.end(); ++arg)
+            {
+                argTypes.push_back(stringToType((*arg)->getType()));
+            }
+
+            llvm::FunctionType *funcType = llvm::FunctionType::get(retType, argTypes, false);
+            llvm::Value *funcVal = mModule->getOrInsertFunction(mangledName, funcType).getCallee();
+            llvm::Function *llvmFunc = llvm::cast<llvm::Function>(funcVal);
+            putFunc(mangledName, llvmFunc);
+
+            // Generate function body
+            llvm::BasicBlock *entry = llvm::BasicBlock::Create(mContext, "entry", llvmFunc);
+            mBuilder.SetInsertPoint(entry);
+
+            mTable.enterContext();
+            mVariableTypes.enterContext();
+            enterRefCountScope();
+
+            // Set up current class and 'this' pointer
+            mCurrentClass = className;
+
+            // Get 'this' parameter (first argument)
+            llvm::Argument *thisArg = llvmFunc->arg_begin();
+            thisArg->setName("this");
+            mThisPtr = thisArg;
+
+            // Register 'this' in the variable types table
+            mVariableTypes.put("this", className);
+
+            // Set up explicit parameters
+            auto argIt = llvmFunc->arg_begin();
+            ++argIt;  // Skip 'this'
+            for (auto arg = args.begin(); arg != args.end(); ++arg, ++argIt)
+            {
+                argIt->setName((*arg)->getName());
+                llvm::AllocaInst *alloca = mBuilder.CreateAlloca(stringToType((*arg)->getType()), 0, (*arg)->getName());
+                mBuilder.CreateStore(&*argIt, alloca);
+                mTable.put((*arg)->getName(), alloca);
+                mVariableTypes.put((*arg)->getName(), (*arg)->getType());
+            }
+
+            // Generate method body
+            shared_ptr<BlockNode> block = (*method)->getBlock();
+            vector<shared_ptr<Expression>> &expressions = block->getExpressions();
+            for (auto expr = expressions.begin(); expr != expressions.end(); ++expr)
+            {
+                generateExpression(*expr);
+            }
+
+            // Clean up
+            mCurrentClass.clear();
+            mThisPtr = nullptr;
+            releaseAllInCurrentScope();
+            leaveRefCountScope();
+            mTable.leaveContext();
+            mVariableTypes.leaveContext();
+        }
+    }
+
+    llvm::Value *CodeGen::generateMethodCall(shared_ptr<MethodCallNode> call)
+    {
+        // Check if this is actually a namespace call (object is an identifier matching a namespace)
+        shared_ptr<IdentifierNode> objIdent = dynamic_pointer_cast<IdentifierNode>(call->getObject());
+        if (objIdent != nullptr)
+        {
+            // Check if this identifier is a namespace by looking for a function with this name
+            string nsFunc = mangleName(objIdent->getValue(), call->getMethodName());
+            llvm::Function *func = getFunc(nsFunc);
+            if (func != nullptr)
+            {
+                // It's a namespace call
+                // Check for local function restriction
+                if (mLocalFunctions.find(nsFunc) != mLocalFunctions.end())
+                {
+                    reportFatalError("Function " + objIdent->getValue() + "." + call->getMethodName() +
+                        " is local and can only be called from within its namespace.", call);
+                    return nullptr;
+                }
+
+                vector<llvm::Value *> args;
+                for (size_t i = 0; i < call->argCount(); ++i)
+                {
+                    shared_ptr<Expression> argNode = call->getArgs()[i];
+                    llvm::Value *arg = generateExpression(argNode);
+                    args.push_back(arg);
+                }
+                return mBuilder.CreateCall(func, args);
+            }
+        }
+
+        // It's a method call on an object
+        // Get the object pointer
+        llvm::Value *objectPtr = generateExpression(call->getObject());
+
+        // Get the type of the object
+        string objectType;
+        if (objIdent != nullptr)
+        {
+            objectType = mVariableTypes.get(objIdent->getValue());
+        }
+        else
+        {
+            reportFatalError("Method call on complex expression not yet supported", call);
+            return nullptr;
+        }
+
+        // Find the method
+        string mangledName = objectType + "_" + call->getMethodName();
+        llvm::Function *func = getFunc(mangledName);
+        if (func == nullptr)
+        {
+            reportFatalError("Unknown method: " + call->getMethodName() + " on type " + objectType, call);
+            return nullptr;
+        }
+
+        // Build argument list: 'this' pointer first, then explicit args
+        vector<llvm::Value *> args;
+        args.push_back(objectPtr);
+
+        for (size_t i = 0; i < call->argCount(); ++i)
+        {
+            shared_ptr<Expression> argNode = call->getArgs()[i];
+            llvm::Value *arg = generateExpression(argNode);
+            args.push_back(arg);
+        }
+
+        return mBuilder.CreateCall(func, args);
     }
 
     void CodeGen::generateIf(shared_ptr<IfBlockNode> ifNode)
@@ -1261,6 +1494,13 @@ namespace codegen
         case ExpressionType::Identifier:
         {
             shared_ptr<IdentifierNode> var = dynamic_pointer_cast<IdentifierNode>(expression);
+
+            // Handle 'this' keyword specially - return the stored this pointer
+            if (var->getValue() == "this" && mThisPtr != nullptr)
+            {
+                return mThisPtr;
+            }
+
             llvm::AllocaInst *inst = mTable.get(var->getValue());
 
             return mBuilder.CreateLoad(inst->getAllocatedType(), inst);
@@ -1374,6 +1614,11 @@ namespace codegen
         {
             shared_ptr<MemberAccessNode> memberNode = dynamic_pointer_cast<MemberAccessNode>(expression);
             return generateMemberAccess(memberNode);
+        }
+        case ExpressionType::MethodCall:
+        {
+            shared_ptr<MethodCallNode> mcn = dynamic_pointer_cast<MethodCallNode>(expression);
+            return generateMethodCall(mcn);
         }
         default:
         {

@@ -640,9 +640,11 @@ namespace ast
     }
 
     // ClassDeclaration implementation
-    ClassDeclaration::ClassDeclaration(string name, vector<shared_ptr<Field>> fields) :
+    ClassDeclaration::ClassDeclaration(string name, vector<shared_ptr<Field>> fields,
+                                       vector<shared_ptr<Function>> methods) :
         mName(name),
-        mFields(fields)
+        mFields(fields),
+        mMethods(methods)
     {
     }
 
@@ -654,6 +656,11 @@ namespace ast
     vector<shared_ptr<Field>> ClassDeclaration::getFields() const
     {
         return mFields;
+    }
+
+    vector<shared_ptr<Function>> ClassDeclaration::getMethods() const
+    {
+        return mMethods;
     }
 
     size_t ClassDeclaration::getFieldIndex(const string& fieldName) const
@@ -679,6 +686,18 @@ namespace ast
         {
             newLine(out, indent);
             (*it)->prettyPrint(out, indent);
+        }
+        --indent;
+        if (!mMethods.empty())
+        {
+            newLine(out, indent);
+            out << "Methods:";
+            ++indent;
+            for (auto it = mMethods.begin(); it != mMethods.end(); ++it)
+            {
+                newLine(out, indent);
+                (*it)->prettyPrint(out, indent);
+            }
         }
     }
 
@@ -745,6 +764,55 @@ namespace ast
     {
         mObject->prettyPrint(out, indent);
         out << "." << mMemberName;
+    }
+
+    // MethodCallNode implementation
+    MethodCallNode::MethodCallNode(shared_ptr<Expression> object, string methodName,
+                                   vector<shared_ptr<Expression>> args, int line, int col) :
+        Expression(line, col),
+        mObject(object),
+        mMethodName(methodName),
+        mArgs(args)
+    {
+    }
+
+    shared_ptr<Expression> MethodCallNode::getObject() const
+    {
+        return mObject;
+    }
+
+    string MethodCallNode::getMethodName() const
+    {
+        return mMethodName;
+    }
+
+    vector<shared_ptr<Expression>> MethodCallNode::getArgs() const
+    {
+        return mArgs;
+    }
+
+    size_t MethodCallNode::argCount() const
+    {
+        return mArgs.size();
+    }
+
+    ExpressionType MethodCallNode::getExpressionType()
+    {
+        return ExpressionType::MethodCall;
+    }
+
+    void MethodCallNode::prettyPrint(ostream &out, size_t indent)
+    {
+        mObject->prettyPrint(out, indent);
+        out << "." << mMethodName << "(";
+        bool first = true;
+        for (auto it = mArgs.begin(); it != mArgs.end(); ++it)
+        {
+            if (!first) out << ", ";
+            first = false;
+            (*it)->prettyPrint(out, indent);
+        }
+        out << ")";
     }
 
     // QualifiedCallNode implementation
