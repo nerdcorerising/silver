@@ -124,13 +124,19 @@ namespace analysis
         // Register namespace exists
         symbols.put("namespace:" + fullPath, "namespace");
 
-        // Register non-local functions with qualified names (local functions are only accessible within the namespace)
+        // Register functions with qualified names
         vector<shared_ptr<Function>> functions = ns->getFunctions();
         for (auto func = functions.begin(); func != functions.end(); ++func)
         {
-            if (!(*func)->isLocal())
+            string qualifiedName = fullPath + "." + (*func)->getName() + "()";
+            if ((*func)->isLocal())
             {
-                string qualifiedName = fullPath + "." + (*func)->getName() + "()";
+                // Register local functions with a "local:" prefix so we can check for them
+                // and give a better error message when they're called from outside
+                symbols.put("local:" + qualifiedName, (*func)->getReturnType());
+            }
+            else
+            {
                 symbols.put(qualifiedName, (*func)->getReturnType());
             }
         }

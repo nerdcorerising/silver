@@ -1,4 +1,4 @@
-# expect-error: is local and can only be called from within its namespace
+# expect-error: Function Math.helper is local and can only be called from within its namespace
 namespace Math {
     local fn helper(x: int) -> int {
         return x * 2;

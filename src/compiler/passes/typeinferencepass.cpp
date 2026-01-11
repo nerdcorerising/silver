@@ -131,7 +131,18 @@ namespace analysis
             string type = symbols.get(funcKey);
             if (type.empty())
             {
-                OPTIMIZATION_ERROR_AT(expression, "Unknown function: " + call->getFullyQualifiedName());
+                // Check if this is a local function that exists but can't be called from here
+                string localFuncKey = "local:" + funcKey;
+                string localType = symbols.get(localFuncKey);
+                if (!localType.empty())
+                {
+                    OPTIMIZATION_ERROR_AT(expression, "Function " + call->getFullyQualifiedName() +
+                        " is local and can only be called from within its namespace");
+                }
+                else
+                {
+                    OPTIMIZATION_ERROR_AT(expression, "Unknown function: " + call->getFullyQualifiedName());
+                }
             }
             return type;
         }
