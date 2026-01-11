@@ -6,9 +6,16 @@
 #include <cstring>
 #include <cstdio>
 #include "logger.h"
+
+#pragma warning(push)
+#pragma warning(disable:4244)
+#pragma warning(disable:4267)
+#pragma warning(disable:4100)
+#pragma warning(disable:4702)
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar/GVN.h"
+#pragma warning(pop)
 
 using namespace std;
 using namespace ast;
@@ -26,6 +33,24 @@ extern "C" {
     }
     int silver_strcmp(const char* a, const char* b) {
         return strcmp(a, b) == 0 ? 1 : 0;
+    }
+    // UTF-8 string length (count codepoints, not bytes)
+    int silver_strlen_utf8(const char* s) {
+        if (!s) return 0;
+        int count = 0;
+        while (*s) {
+            // In UTF-8, continuation bytes start with 10xxxxxx (0x80-0xBF)
+            if ((*s & 0xC0) != 0x80) {
+                count++;
+            }
+            s++;
+        }
+        return count;
+    }
+    // Get byte length of string
+    int silver_string_bytes(const char* s) {
+        if (!s) return 0;
+        return (int)strlen(s);
     }
 }
 
@@ -53,7 +78,7 @@ namespace codegen
     {
         llvm::Type *voidTy = llvm::Type::getVoidTy(mContext);
         llvm::Type *i32Ty = llvm::Type::getInt32Ty(mContext);
-        llvm::Type *i8PtrTy = llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0);
+        llvm::Type *i8PtrTy = llvm::PointerType::get(mContext, 0);
         llvm::Type *doubleTy = llvm::Type::getDoubleTy(mContext);
 
         // silver_print_string(const char* s) -> void
@@ -104,6 +129,18 @@ namespace codegen
         llvm::Function *refcountFunc = llvm::Function::Create(
             refcountTy, llvm::Function::ExternalLinkage, "silver_refcount", mModule);
         putFunc("silver_refcount", refcountFunc);
+
+        // silver_strlen_utf8(const char* s) -> int (count UTF-8 codepoints)
+        llvm::FunctionType *strlenUtf8Ty = llvm::FunctionType::get(i32Ty, {i8PtrTy}, false);
+        llvm::Function *strlenUtf8Func = llvm::Function::Create(
+            strlenUtf8Ty, llvm::Function::ExternalLinkage, "silver_strlen_utf8", mModule);
+        putFunc("silver_strlen_utf8", strlenUtf8Func);
+
+        // silver_string_bytes(const char* s) -> int (count bytes)
+        llvm::FunctionType *stringBytesTy = llvm::FunctionType::get(i32Ty, {i8PtrTy}, false);
+        llvm::Function *stringBytesFunc = llvm::Function::Create(
+            stringBytesTy, llvm::Function::ExternalLinkage, "silver_string_bytes", mModule);
+        putFunc("silver_string_bytes", stringBytesFunc);
     }
 
     void CodeGen::reportFatalError(string message)
@@ -141,7 +178,7 @@ namespace codegen
         {
             // Cast to i8* if needed
             llvm::Value* castedPtr = mBuilder.CreateBitCast(ptr,
-                llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
+                llvm::PointerType::get(mContext, 0));
             mBuilder.CreateCall(retainFunc, {castedPtr});
         }
     }
@@ -153,7 +190,7 @@ namespace codegen
         {
             // Cast to i8* if needed
             llvm::Value* castedPtr = mBuilder.CreateBitCast(ptr,
-                llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
+                llvm::PointerType::get(mContext, 0));
             mBuilder.CreateCall(releaseFunc, {castedPtr});
         }
     }
@@ -228,7 +265,7 @@ namespace codegen
         }
         else if (str == "string")
         {
-            return llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0);
+            return llvm::PointerType::get(mContext, 0);
         }
         else if (str == "void")
         {
@@ -241,7 +278,7 @@ namespace codegen
             if (it != mStructTypes.end())
             {
                 // Return pointer to struct type
-                return llvm::PointerType::get(it->second, 0);
+                return llvm::PointerType::get(mContext, 0);
             }
             reportFatalError("Unknown type: " + str);
             return nullptr;
@@ -293,7 +330,7 @@ namespace codegen
                 }
                 else if (fieldTypeName == "string")
                 {
-                    fieldType = llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0);
+                    fieldType = llvm::PointerType::get(mContext, 0);
                 }
                 else
                 {
@@ -669,7 +706,7 @@ namespace codegen
             if (call->getName() == "silver_refcount" && arg->getType()->isPointerTy())
             {
                 arg = mBuilder.CreateBitCast(arg,
-                    llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
+                    llvm::PointerType::get(mContext, 0));
             }
 
             args.push_back(arg);
@@ -717,7 +754,7 @@ namespace codegen
         llvm::Value *rawPtr = mBuilder.CreateCall(allocFunc, {sizeVal}, "alloc_raw");
 
         // Cast the i8* to the struct pointer type
-        llvm::Type *structPtrType = llvm::PointerType::get(structType, 0);
+        llvm::Type *structPtrType = llvm::PointerType::get(mContext, 0);
         llvm::Value *structPtr = mBuilder.CreateBitCast(rawPtr, structPtrType, typeName + "_ptr");
 
         // Initialize fields with provided arguments
@@ -734,7 +771,7 @@ namespace codegen
             llvm::Value *fieldValue = generateExpression(args[i]);
 
             // Get pointer to the field using GEP
-            llvm::Value *fieldPtr = mBuilder.CreateStructGEP(structType, structPtr, i, fields[i]->getName() + "_ptr");
+            llvm::Value *fieldPtr = mBuilder.CreateStructGEP(structType, structPtr, static_cast<unsigned>(i), fields[i]->getName() + "_ptr");
 
             // Store the value
             mBuilder.CreateStore(fieldValue, fieldPtr);
@@ -816,7 +853,7 @@ namespace codegen
         }
         else if (fieldTypeName == "string")
         {
-            fieldType = llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0);
+            fieldType = llvm::PointerType::get(mContext, 0);
         }
         else
         {
@@ -825,7 +862,7 @@ namespace codegen
         }
 
         // Generate GEP to get pointer to field
-        llvm::Value *fieldPtr = mBuilder.CreateStructGEP(structType, objectPtr, fieldIndex, memberName + "_ptr");
+        llvm::Value *fieldPtr = mBuilder.CreateStructGEP(structType, objectPtr, static_cast<unsigned>(fieldIndex), memberName + "_ptr");
 
         // Load the field value
         return mBuilder.CreateLoad(fieldType, fieldPtr, memberName);
@@ -1002,7 +1039,7 @@ namespace codegen
         {
             shared_ptr<StringLiteralNode> str = dynamic_pointer_cast<StringLiteralNode>(expression);
             // Create a global string constant and return a pointer to it
-            return mBuilder.CreateGlobalStringPtr(str->getValue(), "str");
+            return mBuilder.CreateGlobalString(str->getValue(), "str");
         }
         case ExpressionType::UnaryOperator:
         {
@@ -1192,7 +1229,7 @@ namespace codegen
         {
             llvm::TargetOptions opt;
             llvm::TargetMachine *tm = target->createTargetMachine(
-                targetTriple, "generic", "", opt, llvm::Reloc::PIC_);
+                llvm::Triple(targetTriple), "generic", "", opt, llvm::Reloc::PIC_);
             if (tm)
             {
                 mModule->setDataLayout(tm->createDataLayout());
@@ -1254,6 +1291,8 @@ namespace codegen
         llvm::sys::DynamicLibrary::AddSymbol("silver_print_int", (void*)silver_print_int);
         llvm::sys::DynamicLibrary::AddSymbol("silver_print_float", (void*)silver_print_float);
         llvm::sys::DynamicLibrary::AddSymbol("silver_strcmp", (void*)silver_strcmp);
+        llvm::sys::DynamicLibrary::AddSymbol("silver_strlen_utf8", (void*)silver_strlen_utf8);
+        llvm::sys::DynamicLibrary::AddSymbol("silver_string_bytes", (void*)silver_string_bytes);
 
         std::string errStr;
         llvm::ExecutionEngine *EE = llvm::EngineBuilder(unique_ptr<llvm::Module>(mModule))
@@ -1315,7 +1354,7 @@ namespace codegen
         // Create target machine
         llvm::TargetOptions opt;
         llvm::TargetMachine *targetMachine = target->createTargetMachine(
-            targetTriple, "generic", "", opt, llvm::Reloc::PIC_);
+            llvm::Triple(targetTriple), "generic", "", opt, llvm::Reloc::PIC_);
 
         if (!targetMachine)
         {

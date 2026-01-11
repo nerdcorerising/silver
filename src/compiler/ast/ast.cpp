@@ -8,8 +8,8 @@ namespace ast
     void Node::newLine(ostream &out, size_t indent)
     {
         out << endl;
-        int spaces = indent * 4;
-        for (int i = 0; i < spaces; ++i)
+        size_t spaces = indent * 4;
+        for (size_t i = 0; i < spaces; ++i)
         {
             out << " ";
         }

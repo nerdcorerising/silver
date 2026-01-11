@@ -8,11 +8,14 @@
 #include <map>
 
 #pragma warning (push, 1)
-#pragma warning(disable:4996)
-#pragma warning(disable:4291)
-#pragma warning(disable:4141)
-#pragma warning(disable:4624)
-#pragma warning(disable:4244)  // conversion from 'uint64_t' to 'uint32_t', LLVM internal
+#pragma warning(disable:4996)   // deprecated functions
+#pragma warning(disable:4291)   // no matching operator delete
+#pragma warning(disable:4141)   // used more than once
+#pragma warning(disable:4624)   // destructor implicitly defined as deleted
+#pragma warning(disable:4244)   // conversion possible loss of data
+#pragma warning(disable:4267)   // conversion from size_t
+#pragma warning(disable:4100)   // unreferenced formal parameter
+#pragma warning(disable:4702)   // unreachable code
 #include "llvm/Analysis/Passes.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"

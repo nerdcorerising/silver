@@ -20,9 +20,59 @@ namespace tok
         mState(BufferState::EmptyState),
         mReady(false),
         mEscapeNextChar(false),
-        mEndOfString(false)
+        mEndOfString(false),
+        mUnicodeEscapeDigits(0),
+        mUnicodeEscapeCollected(0),
+        mUnicodeCodepoint(0)
     {
 
+    }
+
+    bool Tokenizer::isHexDigit(char ch)
+    {
+        return (ch >= '0' && ch <= '9') ||
+               (ch >= 'a' && ch <= 'f') ||
+               (ch >= 'A' && ch <= 'F');
+    }
+
+    int Tokenizer::hexDigitValue(char ch)
+    {
+        if (ch >= '0' && ch <= '9') return ch - '0';
+        if (ch >= 'a' && ch <= 'f') return 10 + (ch - 'a');
+        if (ch >= 'A' && ch <= 'F') return 10 + (ch - 'A');
+        return 0;
+    }
+
+    void Tokenizer::appendUtf8(uint32_t codepoint)
+    {
+        // Convert Unicode codepoint to UTF-8 bytes and append to buffer
+        if (codepoint <= 0x7F)
+        {
+            // 1-byte sequence: 0xxxxxxx
+            mBuffer.push_back(static_cast<char>(codepoint));
+        }
+        else if (codepoint <= 0x7FF)
+        {
+            // 2-byte sequence: 110xxxxx 10xxxxxx
+            mBuffer.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+            mBuffer.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+        }
+        else if (codepoint <= 0xFFFF)
+        {
+            // 3-byte sequence: 1110xxxx 10xxxxxx 10xxxxxx
+            mBuffer.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+            mBuffer.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+            mBuffer.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+        }
+        else if (codepoint <= 0x10FFFF)
+        {
+            // 4-byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+            mBuffer.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
+            mBuffer.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+            mBuffer.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+            mBuffer.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+        }
+        // Invalid codepoints (> 0x10FFFF) are silently ignored
     }
 
     bool Tokenizer::ready()
@@ -100,6 +150,30 @@ namespace tok
                 mReady = true;
                 mEndOfString = false;
             }
+            else if (mUnicodeEscapeDigits > 0)
+            {
+                // We're collecting hex digits for a Unicode escape
+                if (isHexDigit(ch))
+                {
+                    mUnicodeCodepoint = (mUnicodeCodepoint << 4) | static_cast<uint32_t>(hexDigitValue(ch));
+                    mUnicodeEscapeCollected++;
+                    insert = false;
+
+                    if (mUnicodeEscapeCollected == mUnicodeEscapeDigits)
+                    {
+                        // We have all the digits, convert to UTF-8
+                        appendUtf8(mUnicodeCodepoint);
+                        mUnicodeEscapeDigits = 0;
+                        mUnicodeEscapeCollected = 0;
+                        mUnicodeCodepoint = 0;
+                    }
+                }
+                else
+                {
+                    // Invalid character in Unicode escape - abort
+                    abort();
+                }
+            }
             else if (mEscapeNextChar)
             {
                 switch (ch)
@@ -130,6 +204,20 @@ namespace tok
                 case '?':
                 case '\\':
                     // do nothing
+                    break;
+                case 'u':
+                    // \uXXXX - 4 hex digits
+                    mUnicodeEscapeDigits = 4;
+                    mUnicodeEscapeCollected = 0;
+                    mUnicodeCodepoint = 0;
+                    insert = false;
+                    break;
+                case 'U':
+                    // \UXXXXXXXX - 8 hex digits
+                    mUnicodeEscapeDigits = 8;
+                    mUnicodeEscapeCollected = 0;
+                    mUnicodeCodepoint = 0;
+                    insert = false;
                     break;
                 default:
                     abort();

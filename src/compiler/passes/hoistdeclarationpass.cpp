@@ -1,5 +1,6 @@
 
 #include "hoistdeclarationpass.h"
+#include "common.h"
 
 using namespace std;
 using namespace ast;
@@ -8,6 +9,7 @@ namespace analysis
 {
     void HoistDeclarationPass::performPass(shared_ptr<BlockNode> block, SymbolTable<string, string> &symbols)
     {
+        UNREFERENCED(symbols);
         if (block == nullptr)
         {
             return;

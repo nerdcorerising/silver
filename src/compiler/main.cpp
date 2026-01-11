@@ -55,7 +55,8 @@ Opts getOpts(int argc, char **argv)
         if (arg[0] == '-' || arg[0] == '/')
         {
             string realArg = arg.substr(1, string::npos);
-            transform(realArg.begin(), realArg.end(), realArg.begin(), ::tolower);
+            transform(realArg.begin(), realArg.end(), realArg.begin(),
+                [](unsigned char c) { return static_cast<char>(::tolower(c)); });
 
             if (realArg == "jit")
             {

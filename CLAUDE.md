@@ -74,3 +74,19 @@ The compiler follows a traditional pipeline:
 - `src/compiler/parser/` - Tokenizer and recursive descent parser
 - `src/compiler/passes/` - Analysis and transformation passes
 - `src/compiler/codegen/` - LLVM code generation
+- `src/runtime/` - Runtime library linked into compiled programs
+
+## String Support
+
+Strings in Silver are UTF-8 encoded. The following escape sequences are supported:
+
+- `\n`, `\t`, `\r`, `\v`, `\a`, `\b`, `\f` - Standard escape sequences
+- `\'`, `\"`, `\\`, `\?` - Quote and backslash escapes
+- `\uXXXX` - Unicode codepoint (4 hex digits, BMP range U+0000 to U+FFFF)
+- `\U00XXXXXX` - Unicode codepoint (8 hex digits, full range U+0000 to U+10FFFF)
+
+### String Runtime Functions
+
+- `silver_strlen_utf8(s: string) -> int` - Returns the number of Unicode codepoints in the string
+- `silver_string_bytes(s: string) -> int` - Returns the number of bytes in the string
+- `silver_strcmp(a: string, b: string) -> int` - Returns 1 if strings are equal, 0 otherwise

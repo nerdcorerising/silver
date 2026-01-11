@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <cstdint>
 
 namespace tok
 {
@@ -161,6 +162,16 @@ namespace tok
         bool mReady;
         bool mEscapeNextChar;
         bool mEndOfString;
+
+        // Unicode escape sequence handling
+        int mUnicodeEscapeDigits;      // Number of hex digits expected (4 for \u, 8 for \U)
+        int mUnicodeEscapeCollected;   // Number of hex digits collected so far
+        uint32_t mUnicodeCodepoint;    // Accumulated codepoint value
+
+        // Helper methods for Unicode
+        bool isHexDigit(char ch);
+        int hexDigitValue(char ch);
+        void appendUtf8(uint32_t codepoint);
     };
 
 }

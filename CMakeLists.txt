@@ -5,6 +5,11 @@ project(silver)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Set warning level
+if(MSVC)
+    add_compile_options(/W4)
+endif()
+
 # Use dynamic CRT (/MD for Release, /MDd for Debug)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
