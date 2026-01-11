@@ -8,6 +8,7 @@
 #include "parser/parser.h"
 #include "passes/analysispass.h"
 #include "codegen/codegen.h"
+#include "logger.h"
 
 using namespace std;
 using namespace analysis;
@@ -21,7 +22,8 @@ public:
     inline ProgramOpts() :
         runJit(false),
         genByteCode(false),
-        compile(false)
+        compile(false),
+        verbose(false)
     {
         buildType = BuildType::Debug;
     }
@@ -29,6 +31,7 @@ public:
     bool runJit;
     bool genByteCode;
     bool compile;
+    bool verbose;
     string outputName;
     BuildType buildType;
 };
@@ -76,6 +79,10 @@ Opts getOpts(int argc, char **argv)
             {
                 opt.outputName = realArg.substr(2);
             }
+            else if (realArg == "verbose" || realArg == "v")
+            {
+                opt.verbose = true;
+            }
         }
     }
 
@@ -91,6 +98,9 @@ Opts getOpts(int argc, char **argv)
 int main(int argc, char **argv)
 {
     Opts opt = getOpts(argc, argv);
+
+    // Configure logger based on verbose flag
+    logging::Logger::setEnabled(opt.verbose);
 
     filebuf fb;
     shared_ptr<ast::Assembly> node;
@@ -126,7 +136,10 @@ int main(int argc, char **argv)
         AnalysisPassManager analysis(opt.buildType);
         analysis.performPasses(node);
 
-        node->prettyPrint(cout);
+        if (opt.verbose)
+        {
+            node->prettyPrint(cout);
+        }
 
         string out = "";
         if (opt.genByteCode)

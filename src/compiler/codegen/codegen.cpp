@@ -5,6 +5,7 @@
 #include <string>
 #include <cstring>
 #include <cstdio>
+#include "logger.h"
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar/GVN.h"
@@ -305,7 +306,7 @@ namespace codegen
             llvm::StructType *structType = llvm::StructType::create(mContext, fieldTypes, className);
             mStructTypes[className] = structType;
 
-            fprintf(stderr, "Codegen: Created struct type for class %s with %zu fields\n",
+            LOG("Codegen: Created struct type for class %s with %zu fields\n",
                     className.c_str(), fieldTypes.size());
         }
     }
@@ -355,7 +356,7 @@ namespace codegen
 
     llvm::Value *CodeGen::generateFunction(shared_ptr<Function> function)
     {
-        fprintf(stderr, "Codegen: Generating function %s\n", function->getName().c_str());
+        LOG("Codegen: Generating function %s\n", function->getName().c_str());
         mTable.enterContext();
         mVariableTypes.enterContext();
         llvm::Function *llvmFunc = getFunc(function->getName());
@@ -399,7 +400,7 @@ namespace codegen
             }
         }
 
-        fprintf(stderr, "Codegen: Running optimization passes on %s\n", function->getName().c_str());
+        LOG("Codegen: Running optimization passes on %s\n", function->getName().c_str());
 
         // Verify function before optimization to catch IR issues
         std::string verifyError;
@@ -411,7 +412,7 @@ namespace codegen
         }
 
         mFpm->run(*llvmFunc);
-        fprintf(stderr, "Codegen: Finished function %s\n", function->getName().c_str());
+        LOG("Codegen: Finished function %s\n", function->getName().c_str());
 
         mTable.leaveContext();
         mVariableTypes.leaveContext();
@@ -1029,7 +1030,7 @@ namespace codegen
                 typeName = allocNode->getTypeName();
             }
 
-            fprintf(stderr, "Codegen: Declaration %s type=%s\n", decl->getName().c_str(), typeName.c_str());
+            LOG("Codegen: Declaration %s type=%s\n", decl->getName().c_str(), typeName.c_str());
 
             ASSERT(typeName != "");
             llvm::Type *type = stringToType(typeName);
@@ -1042,15 +1043,15 @@ namespace codegen
             if (isRefCountedType(typeName) && !mRefCountedVarsStack.empty())
             {
                 mRefCountedVarsStack.back().push_back(decl->getName());
-                fprintf(stderr, "Codegen: Tracking ref-counted variable %s\n", decl->getName().c_str());
+                LOG("Codegen: Tracking ref-counted variable %s\n", decl->getName().c_str());
             }
 
             // If declaration has an initializer, store the value
             if (initExpr != nullptr)
             {
-                fprintf(stderr, "Codegen: Generating initializer for %s\n", decl->getName().c_str());
+                LOG("Codegen: Generating initializer for %s\n", decl->getName().c_str());
                 llvm::Value *initValue = generateExpression(initExpr);
-                fprintf(stderr, "Codegen: Storing initializer for %s\n", decl->getName().c_str());
+                LOG("Codegen: Storing initializer for %s\n", decl->getName().c_str());
                 mBuilder.CreateStore(initValue, inst);
             }
 
@@ -1214,9 +1215,12 @@ namespace codegen
 
         generateClassTypes(assembly);
         generateAssembly(assembly);
-        fprintf(stderr, "Codegen: Assembly generation complete, printing module\n");
-        mModule->print(llvm::errs(), nullptr);
-        fprintf(stderr, "Codegen: Module printed, verifying\n");
+        if (logging::Logger::isEnabled())
+        {
+            LOG("Codegen: Assembly generation complete, printing module\n");
+            mModule->print(llvm::errs(), nullptr);
+            LOG("Codegen: Module printed, verifying\n");
+        }
         llvm::verifyModule(*mModule);
 
         filebuf fb;
