@@ -23,7 +23,11 @@ namespace tok
         mEndOfString(false),
         mUnicodeEscapeDigits(0),
         mUnicodeEscapeCollected(0),
-        mUnicodeCodepoint(0)
+        mUnicodeCodepoint(0),
+        mCurrentLine(1),
+        mCurrentColumn(1),
+        mTokenStartLine(1),
+        mTokenStartColumn(1)
     {
 
     }
@@ -83,6 +87,13 @@ namespace tok
     void Tokenizer::insert(char ch)
     {
         bool insert = true;
+
+        // Record position when starting a new token
+        if (mState == BufferState::EmptyState)
+        {
+            mTokenStartLine = mCurrentLine;
+            mTokenStartColumn = mCurrentColumn;
+        }
 
         switch (mState)
         {
@@ -285,6 +296,17 @@ namespace tok
         {
             mBuffer.push_back(ch);
         }
+
+        // Update line/column tracking
+        if (ch == '\n')
+        {
+            mCurrentLine++;
+            mCurrentColumn = 1;
+        }
+        else
+        {
+            mCurrentColumn++;
+        }
     }
 
     Token Tokenizer::dispense()
@@ -297,6 +319,9 @@ namespace tok
         string text = string(mBuffer.begin(), mBuffer.end());
         TokenType type = tokenType(text);
 
+        // Save the position of the token we're about to return
+        int tokenLine = mTokenStartLine;
+        int tokenColumn = mTokenStartColumn;
 
         mState = bufferType(ch);
         mBuffer.clear();
@@ -306,9 +331,13 @@ namespace tok
             mBuffer.push_back(ch);
         }
 
+        // Record start of the next token (which begins with ch)
+        mTokenStartLine = mCurrentLine;
+        mTokenStartColumn = mCurrentColumn - 1; // ch was already counted
+
         mReady = false;
 
-        return Token(type, text);
+        return Token(type, text, tokenLine, tokenColumn);
     }
 
     Token Tokenizer::flush()
@@ -316,10 +345,14 @@ namespace tok
         string text = string(mBuffer.begin(), mBuffer.end());
         TokenType type = tokenType(text);
 
+        // Save the position of the token we're about to return
+        int tokenLine = mTokenStartLine;
+        int tokenColumn = mTokenStartColumn;
+
         mState = BufferState::EmptyState;
 
         mReady = false;
-        return Token(type, text);
+        return Token(type, text, tokenLine, tokenColumn);
     }
 
     TokenType Tokenizer::tokenType(string text)

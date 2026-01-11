@@ -19,6 +19,7 @@ namespace parse
         std::string mName;
 
         void reportFatalError(std::string message);
+        void reportFatalError(std::string message, tok::Token token);
 
         std::vector<std::shared_ptr<ast::Argument>> parseArgumentsForDeclaration();
         std::vector<std::shared_ptr<ast::Function>> parseImport();

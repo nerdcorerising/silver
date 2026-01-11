@@ -22,7 +22,30 @@ namespace parse
 
     void Parser::reportFatalError(string message)
     {
-        fprintf(stderr, "Error encountered during parsing: %s\n", message.c_str());
+        // Try to get current token for line info
+        Token token;
+        if (mTokens.tryGetCurrent(token) && token.line() > 0)
+        {
+            reportFatalError(message, token);
+        }
+        else
+        {
+            fprintf(stderr, "Error: %s\n", message.c_str());
+            throw message;
+        }
+    }
+
+    void Parser::reportFatalError(string message, Token token)
+    {
+        if (token.line() > 0)
+        {
+            fprintf(stderr, "Error at line %d, column %d: %s\n",
+                    token.line(), token.column(), message.c_str());
+        }
+        else
+        {
+            fprintf(stderr, "Error: %s\n", message.c_str());
+        }
         throw message;
     }
 
@@ -651,6 +674,13 @@ namespace parse
 
             type = current().text();
             advance();
+
+            // Check for optional initializer after type annotation
+            if (current().type() == TokenType::Operator && current().text() == "=")
+            {
+                advance();
+                expression = parseStatement();
+            }
         }
         else if (current().type() == TokenType::Operator && current().text() == "=")
         {

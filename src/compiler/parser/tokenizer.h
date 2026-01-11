@@ -50,17 +50,31 @@ namespace tok
     private:
         TokenType mType; // What kind of token it is.
         std::string mText; // The text of the token, taken directly from the input
+        int mLine;   // Line number where token starts (1-based)
+        int mColumn; // Column number where token starts (1-based)
 
     public:
         Token() :
             mType(TokenType::Error),
-            mText()
+            mText(),
+            mLine(0),
+            mColumn(0)
         {
         }
 
         Token(TokenType ty, std::string txt) :
             mType(ty),
-            mText(txt)
+            mText(txt),
+            mLine(0),
+            mColumn(0)
+        {
+        }
+
+        Token(TokenType ty, std::string txt, int line, int column) :
+            mType(ty),
+            mText(txt),
+            mLine(line),
+            mColumn(column)
         {
         }
 
@@ -77,6 +91,16 @@ namespace tok
         inline std::string text()
         {
             return mText;
+        }
+
+        inline int line() const
+        {
+            return mLine;
+        }
+
+        inline int column() const
+        {
+            return mColumn;
         }
 
         inline bool isLiteral()
@@ -167,6 +191,12 @@ namespace tok
         int mUnicodeEscapeDigits;      // Number of hex digits expected (4 for \u, 8 for \U)
         int mUnicodeEscapeCollected;   // Number of hex digits collected so far
         uint32_t mUnicodeCodepoint;    // Accumulated codepoint value
+
+        // Line tracking
+        int mCurrentLine;      // Current line number (1-based)
+        int mCurrentColumn;    // Current column number (1-based)
+        int mTokenStartLine;   // Line where current token started
+        int mTokenStartColumn; // Column where current token started
 
         // Helper methods for Unicode
         bool isHexDigit(char ch);
