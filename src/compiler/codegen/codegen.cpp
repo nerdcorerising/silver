@@ -77,6 +77,31 @@ namespace codegen
         llvm::Function *strcmpFunc = llvm::Function::Create(
             strcmpTy, llvm::Function::ExternalLinkage, "silver_strcmp", mModule);
         putFunc("silver_strcmp", strcmpFunc);
+
+        // silver_retain(void* ptr) -> void (increment ref count)
+        llvm::FunctionType *retainTy = llvm::FunctionType::get(voidTy, {i8PtrTy}, false);
+        llvm::Function *retainFunc = llvm::Function::Create(
+            retainTy, llvm::Function::ExternalLinkage, "silver_retain", mModule);
+        putFunc("silver_retain", retainFunc);
+
+        // silver_release(void* ptr) -> void (decrement ref count, free if zero)
+        llvm::FunctionType *releaseTy = llvm::FunctionType::get(voidTy, {i8PtrTy}, false);
+        llvm::Function *releaseFunc = llvm::Function::Create(
+            releaseTy, llvm::Function::ExternalLinkage, "silver_release", mModule);
+        putFunc("silver_release", releaseFunc);
+
+        // silver_alloc(size_t size) -> void* (allocate memory with ref count header)
+        llvm::Type *i64Ty = llvm::Type::getInt64Ty(mContext);
+        llvm::FunctionType *allocTy = llvm::FunctionType::get(i8PtrTy, {i64Ty}, false);
+        llvm::Function *allocFunc = llvm::Function::Create(
+            allocTy, llvm::Function::ExternalLinkage, "silver_alloc", mModule);
+        putFunc("silver_alloc", allocFunc);
+
+        // silver_refcount(void* ptr) -> int (get current ref count for debugging/testing)
+        llvm::FunctionType *refcountTy = llvm::FunctionType::get(i32Ty, {i8PtrTy}, false);
+        llvm::Function *refcountFunc = llvm::Function::Create(
+            refcountTy, llvm::Function::ExternalLinkage, "silver_refcount", mModule);
+        putFunc("silver_refcount", refcountFunc);
     }
 
     void CodeGen::reportFatalError(string message)
@@ -99,6 +124,94 @@ namespace codegen
         }
 
         return (*it).second;
+    }
+
+    bool CodeGen::isRefCountedType(const string& typeName)
+    {
+        // User-defined class types are ref-counted
+        return mStructTypes.find(typeName) != mStructTypes.end();
+    }
+
+    void CodeGen::generateRetain(llvm::Value* ptr)
+    {
+        llvm::Function* retainFunc = getFunc("silver_retain");
+        if (retainFunc)
+        {
+            // Cast to i8* if needed
+            llvm::Value* castedPtr = mBuilder.CreateBitCast(ptr,
+                llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
+            mBuilder.CreateCall(retainFunc, {castedPtr});
+        }
+    }
+
+    void CodeGen::generateRelease(llvm::Value* ptr)
+    {
+        llvm::Function* releaseFunc = getFunc("silver_release");
+        if (releaseFunc)
+        {
+            // Cast to i8* if needed
+            llvm::Value* castedPtr = mBuilder.CreateBitCast(ptr,
+                llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
+            mBuilder.CreateCall(releaseFunc, {castedPtr});
+        }
+    }
+
+    void CodeGen::enterRefCountScope()
+    {
+        mRefCountedVarsStack.push_back(vector<string>());
+    }
+
+    void CodeGen::leaveRefCountScope()
+    {
+        // Only generate release calls if the current block doesn't already have a terminator
+        // (e.g., a return statement already handled releases via releaseAllScopes)
+        llvm::BasicBlock *currentBlock = mBuilder.GetInsertBlock();
+        if (currentBlock && !currentBlock->getTerminator())
+        {
+            releaseAllInCurrentScope();
+        }
+        mRefCountedVarsStack.pop_back();
+    }
+
+    void CodeGen::releaseAllInCurrentScope()
+    {
+        if (mRefCountedVarsStack.empty()) return;
+
+        // Make sure we have a valid insert point
+        llvm::BasicBlock* block = mBuilder.GetInsertBlock();
+        if (!block) return;
+
+        vector<string>& currentScope = mRefCountedVarsStack.back();
+        for (const string& varName : currentScope)
+        {
+            llvm::AllocaInst* inst = mTable.get(varName);
+            if (inst)
+            {
+                // Load the pointer and release it
+                llvm::Value* ptr = mBuilder.CreateLoad(inst->getAllocatedType(), inst);
+                generateRelease(ptr);
+            }
+        }
+    }
+
+    void CodeGen::releaseAllScopes()
+    {
+        // Release all ref-counted variables in all active scopes (for return statements)
+        llvm::BasicBlock* block = mBuilder.GetInsertBlock();
+        if (!block) return;
+
+        for (auto it = mRefCountedVarsStack.rbegin(); it != mRefCountedVarsStack.rend(); ++it)
+        {
+            for (const string& varName : *it)
+            {
+                llvm::AllocaInst* inst = mTable.get(varName);
+                if (inst)
+                {
+                    llvm::Value* ptr = mBuilder.CreateLoad(inst->getAllocatedType(), inst);
+                    generateRelease(ptr);
+                }
+            }
+        }
     }
 
     llvm::Type *CodeGen::stringToType(string str)
@@ -287,6 +400,15 @@ namespace codegen
         }
 
         fprintf(stderr, "Codegen: Running optimization passes on %s\n", function->getName().c_str());
+
+        // Verify function before optimization to catch IR issues
+        std::string verifyError;
+        llvm::raw_string_ostream verifyStream(verifyError);
+        if (llvm::verifyFunction(*llvmFunc, &verifyStream))
+        {
+            fprintf(stderr, "Function verification failed: %s\n", verifyStream.str().c_str());
+            llvmFunc->print(llvm::errs());
+        }
 
         mFpm->run(*llvmFunc);
         fprintf(stderr, "Codegen: Finished function %s\n", function->getName().c_str());
@@ -538,6 +660,13 @@ namespace codegen
             shared_ptr<Expression> argNode = dynamic_pointer_cast<Expression>(call->getArgs()[i]);
             llvm::Value *arg = generateExpression(argNode);
 
+            // Cast struct pointers to i8* for runtime functions that expect void*
+            if (call->getName() == "silver_refcount" && arg->getType()->isPointerTy())
+            {
+                arg = mBuilder.CreateBitCast(arg,
+                    llvm::PointerType::get(llvm::Type::getInt8Ty(mContext), 0));
+            }
+
             args.push_back(arg);
         }
 
@@ -567,8 +696,24 @@ namespace codegen
         shared_ptr<ClassDeclaration> classDecl = classIt->second;
         vector<shared_ptr<Field>> fields = classDecl->getFields();
 
-        // Allocate memory for the struct (stack allocation for now)
-        llvm::AllocaInst *structPtr = mBuilder.CreateAlloca(structType, nullptr, typeName + "_instance");
+        // Get the size of the struct
+        const llvm::DataLayout& dataLayout = mModule->getDataLayout();
+        uint64_t structSize = dataLayout.getTypeAllocSize(structType);
+
+        // Allocate memory on the heap via silver_alloc (includes ref count header, starts at refcount=1)
+        llvm::Function *allocFunc = getFunc("silver_alloc");
+        if (allocFunc == nullptr)
+        {
+            reportFatalError("silver_alloc function not found");
+            return nullptr;
+        }
+
+        llvm::Value *sizeVal = llvm::ConstantInt::get(llvm::Type::getInt64Ty(mContext), structSize);
+        llvm::Value *rawPtr = mBuilder.CreateCall(allocFunc, {sizeVal}, "alloc_raw");
+
+        // Cast the i8* to the struct pointer type
+        llvm::Type *structPtrType = llvm::PointerType::get(structType, 0);
+        llvm::Value *structPtr = mBuilder.CreateBitCast(rawPtr, structPtrType, typeName + "_ptr");
 
         // Initialize fields with provided arguments
         vector<shared_ptr<Expression>> args = allocNode->getArgs();
@@ -697,6 +842,10 @@ namespace codegen
 
         vector<llvm::BasicBlock *> bodyBlocks;
         bodyBlocks.push_back(currentBodyBlock);
+
+        // Track blocks that need terminators after generateIntoBlock (for nested control flow)
+        vector<llvm::BasicBlock *> exitBlocks;
+
         llvm::Value *cmp;
         while (next != nullptr)
         {
@@ -710,6 +859,13 @@ namespace codegen
 
             generateIntoBlock(currentBodyBlock, current->getBlock());
 
+            // Track where we ended up after processing the block
+            llvm::BasicBlock *exitBlock = mBuilder.GetInsertBlock();
+            if (exitBlock && !exitBlock->getTerminator())
+            {
+                exitBlocks.push_back(exitBlock);
+            }
+
             currentConditionBlock = nextConditionBlock;
             currentBodyBlock = nextBodyBlock;
             current = next;
@@ -722,6 +878,13 @@ namespace codegen
 
         generateIntoBlock(currentBodyBlock, current->getBlock());
 
+        // Track where we ended up after processing the last if body
+        llvm::BasicBlock *lastIfExitBlock = mBuilder.GetInsertBlock();
+        if (lastIfExitBlock && !lastIfExitBlock->getTerminator())
+        {
+            exitBlocks.push_back(lastIfExitBlock);
+        }
+
         shared_ptr<BlockNode> elseBlock = ifNode->getElseBlock();
         llvm::BasicBlock *end;
         if (elseBlock != nullptr)
@@ -729,6 +892,13 @@ namespace codegen
             llvm::BasicBlock *elseBasicBlock = llvm::BasicBlock::Create(mContext, "else body", function);
             bodyBlocks.push_back(elseBasicBlock);
             generateIntoBlock(elseBasicBlock, elseBlock);
+
+            // Track where we ended up after processing else block
+            llvm::BasicBlock *elseExitBlock = mBuilder.GetInsertBlock();
+            if (elseExitBlock && !elseExitBlock->getTerminator())
+            {
+                exitBlocks.push_back(elseExitBlock);
+            }
 
             mBuilder.SetInsertPoint(currentConditionBlock);
             mBuilder.CreateCondBr(cmp, currentBodyBlock, elseBasicBlock);
@@ -743,6 +913,19 @@ namespace codegen
         }
 
         bool terminated = false;
+
+        // Add terminators to all exit blocks from nested control flow
+        for (auto it = exitBlocks.begin(); it != exitBlocks.end(); ++it)
+        {
+            if (!(*it)->getTerminator())
+            {
+                mBuilder.SetInsertPoint(*it);
+                mBuilder.CreateBr(end);
+                terminated = true;
+            }
+        }
+
+        // Also check direct body blocks
         for (auto it = bodyBlocks.begin(); it != bodyBlocks.end(); ++it)
         {
             if ((*it)->getTerminator() == nullptr)
@@ -783,7 +966,11 @@ namespace codegen
         mBuilder.CreateBr(condition);
 
         generateIntoBlock(body, whileNode->getBlock());
-        mBuilder.CreateBr(entry);
+        // Only add branch if current block doesn't have a terminator (e.g., from return)
+        if (!mBuilder.GetInsertBlock()->getTerminator())
+        {
+            mBuilder.CreateBr(entry);
+        }
 
         mBuilder.SetInsertPoint(condition);
         llvm::Value *cmp = generateExpression(whileNode->getCondition());
@@ -851,6 +1038,13 @@ namespace codegen
             mTable.put(decl->getName(), inst);
             mVariableTypes.put(decl->getName(), typeName);
 
+            // Track ref-counted variables for automatic release on scope exit
+            if (isRefCountedType(typeName) && !mRefCountedVarsStack.empty())
+            {
+                mRefCountedVarsStack.back().push_back(decl->getName());
+                fprintf(stderr, "Codegen: Tracking ref-counted variable %s\n", decl->getName().c_str());
+            }
+
             // If declaration has an initializer, store the value
             if (initExpr != nullptr)
             {
@@ -866,6 +1060,9 @@ namespace codegen
         {
             shared_ptr<ReturnNode> ret = dynamic_pointer_cast<ReturnNode>(expression);
             llvm::Value *exp = generateExpression(ret->getExpression());
+
+            // Release all ref-counted variables before returning
+            releaseAllScopes();
 
             return mBuilder.CreateRet(exp);
         }
@@ -951,6 +1148,7 @@ namespace codegen
     {
         mTable.enterContext();
         mVariableTypes.enterContext();
+        enterRefCountScope();
 
         mBuilder.SetInsertPoint(basicBlock);
 
@@ -961,6 +1159,7 @@ namespace codegen
             generateExpression(exp);
         }
 
+        leaveRefCountScope();
         mTable.leaveContext();
         mVariableTypes.leaveContext();
         return basicBlock;
@@ -972,6 +1171,29 @@ namespace codegen
         shared_ptr<Assembly> assembly = mTree;
 
         mModule = new llvm::Module(assembly->getName(), mContext);
+
+        // Initialize native target for data layout info
+        llvm::InitializeNativeTarget();
+        llvm::InitializeNativeTargetAsmPrinter();
+        llvm::InitializeNativeTargetAsmParser();
+
+        // Set up target triple and data layout early so we can compute struct sizes
+        std::string targetTriple = llvm::sys::getDefaultTargetTriple();
+        mModule->setTargetTriple(llvm::Triple(targetTriple));
+
+        std::string error;
+        const llvm::Target *target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+        if (target)
+        {
+            llvm::TargetOptions opt;
+            llvm::TargetMachine *tm = target->createTargetMachine(
+                targetTriple, "generic", "", opt, llvm::Reloc::PIC_);
+            if (tm)
+            {
+                mModule->setDataLayout(tm->createDataLayout());
+                delete tm;
+            }
+        }
 
         mFpm = new llvm::legacy::FunctionPassManager(mModule);
 

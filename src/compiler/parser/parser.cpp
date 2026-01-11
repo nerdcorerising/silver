@@ -412,7 +412,7 @@ namespace parse
             break;
         default:
         {
-            CONSISTENCY_CHECK(false, "Unknown token type in Parser::makeNode");
+            CONSISTENCY_CHECK(false, "Unknown token type in Parser::makeNode: '" + current().text() + "' (type " + std::to_string((int)current().type()) + ")");
         }
         }
 

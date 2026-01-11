@@ -28,6 +28,7 @@
 // #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Support/raw_os_ostream.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/ExecutionEngine/GenericValue.h"
 #include "llvm/ExecutionEngine/Interpreter.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -57,6 +58,9 @@ namespace codegen
         std::map<std::string, llvm::Function *> mFunctions;
         std::map<std::string, llvm::StructType *> mStructTypes;
         std::map<std::string, std::shared_ptr<ast::ClassDeclaration>> mClasses;
+
+        // Stack of ref-counted variables per scope (for generating release calls)
+        std::vector<std::vector<std::string>> mRefCountedVarsStack;
 
         llvm::LLVMContext mContext;
         llvm::Module *mModule;
@@ -89,6 +93,15 @@ namespace codegen
         void generateWhile(std::shared_ptr<ast::WhileNode> whileNode);
         llvm::Value *generateBlock(std::shared_ptr<ast::BlockNode> block, llvm::Function * llvmFunc);
         llvm::Value *generateIntoBlock(llvm::BasicBlock *basicBlock, std::shared_ptr<ast::BlockNode> block);
+
+        // Reference counting helpers
+        bool isRefCountedType(const std::string& typeName);
+        void generateRetain(llvm::Value* ptr);
+        void generateRelease(llvm::Value* ptr);
+        void enterRefCountScope();
+        void leaveRefCountScope();
+        void releaseAllInCurrentScope();
+        void releaseAllScopes();  // For return statements - release all ref-counted vars
     public:
         CodeGen(std::shared_ptr<ast::Assembly> tree, std::string outFile="");
 
