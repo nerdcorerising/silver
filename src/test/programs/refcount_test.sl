@@ -12,41 +12,41 @@ class Box {
 fn main() -> int {
     # Test 1: Basic alloc gives refcount of 1
     let p1 = alloc Point(10, 20);
-    if (silver_refcount(p1) != 1) {
-        silver_print_string("FAIL: p1 refcount should be 1");
-        silver_print_int(silver_refcount(p1));
+    if (refcount(p1) != 1) {
+        print_string("FAIL: p1 refcount should be 1");
+        print_int(refcount(p1));
         return -1;
     }
 
     # Test 2: Second object also has refcount 1
     let p2 = alloc Point(30, 40);
-    if (silver_refcount(p2) != 1) {
-        silver_print_string("FAIL: p2 refcount should be 1");
+    if (refcount(p2) != 1) {
+        print_string("FAIL: p2 refcount should be 1");
         return -2;
     }
 
     # Test 3: First object still has refcount 1
-    if (silver_refcount(p1) != 1) {
-        silver_print_string("FAIL: p1 refcount changed unexpectedly");
+    if (refcount(p1) != 1) {
+        print_string("FAIL: p1 refcount changed unexpectedly");
         return -3;
     }
 
     # Test 4: Object in nested scope
     if (p1.x == 10) {
         let inner = alloc Box(100, 200);
-        if (silver_refcount(inner) != 1) {
-            silver_print_string("FAIL: inner refcount should be 1");
+        if (refcount(inner) != 1) {
+            print_string("FAIL: inner refcount should be 1");
             return -4;
         }
 
         # Verify inner object works
         if (inner.width != 100) {
-            silver_print_string("FAIL: inner.width wrong");
+            print_string("FAIL: inner.width wrong");
             return -5;
         }
 
         if (inner.height != 200) {
-            silver_print_string("FAIL: inner.height wrong");
+            print_string("FAIL: inner.height wrong");
             return -6;
         }
 
@@ -55,22 +55,22 @@ fn main() -> int {
 
     # Test 5: Outer objects still valid after inner scope
     if (p1.x != 10) {
-        silver_print_string("FAIL: p1.x corrupted");
+        print_string("FAIL: p1.x corrupted");
         return -7;
     }
 
     if (p1.y != 20) {
-        silver_print_string("FAIL: p1.y corrupted");
+        print_string("FAIL: p1.y corrupted");
         return -8;
     }
 
     if (p2.x != 30) {
-        silver_print_string("FAIL: p2.x corrupted");
+        print_string("FAIL: p2.x corrupted");
         return -9;
     }
 
     if (p2.y != 40) {
-        silver_print_string("FAIL: p2.y corrupted");
+        print_string("FAIL: p2.y corrupted");
         return -10;
     }
 
@@ -78,13 +78,13 @@ fn main() -> int {
     let counter = 0;
     while (counter < 3) {
         let temp = alloc Point(counter, counter * 2);
-        if (silver_refcount(temp) != 1) {
-            silver_print_string("FAIL: loop temp refcount wrong");
+        if (refcount(temp) != 1) {
+            print_string("FAIL: loop temp refcount wrong");
             return -11;
         }
 
         if (temp.x != counter) {
-            silver_print_string("FAIL: temp.x wrong in loop");
+            print_string("FAIL: temp.x wrong in loop");
             return -12;
         }
 
@@ -93,6 +93,6 @@ fn main() -> int {
     }
 
     # All tests passed
-    silver_print_string("All refcount tests passed!");
+    print_string("All refcount tests passed!");
     return 50;
 }

@@ -15,7 +15,8 @@ namespace ast
         }
     }
 
-    BlockNode::BlockNode(vector<shared_ptr<Expression>> expressions) :
+    BlockNode::BlockNode(vector<shared_ptr<Expression>> expressions, int line, int col) :
+        Expression(line, col),
         mExpressions(expressions)
     {
 
@@ -53,10 +54,13 @@ namespace ast
         out << "}";
     }
 
-    Assembly::Assembly(string name, vector<shared_ptr<Function>> functions, vector<shared_ptr<ClassDeclaration>> classes) :
+    Assembly::Assembly(string name, vector<shared_ptr<Function>> functions,
+                       vector<shared_ptr<ClassDeclaration>> classes,
+                       vector<shared_ptr<NamespaceDeclaration>> namespaces) :
         mName(name),
         mFunctions(functions),
-        mClasses(classes)
+        mClasses(classes),
+        mNamespaces(namespaces)
     {
 
     }
@@ -69,6 +73,11 @@ namespace ast
     vector<shared_ptr<ClassDeclaration>> Assembly::getClasses()
     {
         return mClasses;
+    }
+
+    vector<shared_ptr<NamespaceDeclaration>> Assembly::getNamespaces()
+    {
+        return mNamespaces;
     }
 
     size_t Assembly::size()
@@ -106,11 +115,12 @@ namespace ast
         newLine(out, 0);
     }
 
-    Function::Function(shared_ptr<BlockNode> block, string name, vector<shared_ptr<Argument>> arguments, string returnType) :
+    Function::Function(shared_ptr<BlockNode> block, string name, vector<shared_ptr<Argument>> arguments, string returnType, bool isLocal) :
         mBlock(block),
         mName(name),
         mArgs(arguments),
-        mReturnType(returnType)
+        mReturnType(returnType),
+        mIsLocal(isLocal)
     {
         ASSERT(mBlock != nullptr);
     }
@@ -123,6 +133,11 @@ namespace ast
     string Function::getName() const
     {
         return mName;
+    }
+
+    bool Function::isLocal() const
+    {
+        return mIsLocal;
     }
 
     size_t Function::argCount()
@@ -176,7 +191,8 @@ namespace ast
         mBlock->prettyPrint(out, indent + 1);
     }
 
-    DeclarationNode::DeclarationNode(string name, string type, shared_ptr<Expression> expression) :
+    DeclarationNode::DeclarationNode(string name, string type, shared_ptr<Expression> expression, int line, int col) :
+        Expression(line, col),
         mName(name),
         mType(type),
         mExpression(expression)
@@ -220,7 +236,8 @@ namespace ast
         out << "Declaration type:" << mType << " name:" << mName;
     }
 
-    ReturnNode::ReturnNode(shared_ptr<Expression> expression) :
+    ReturnNode::ReturnNode(shared_ptr<Expression> expression, int line, int col) :
+        Expression(line, col),
         mExpression(expression)
     {
 
@@ -244,7 +261,8 @@ namespace ast
         mExpression->prettyPrint(out, indent);
     }
 
-    CastNode::CastNode(string castType, shared_ptr<Expression> expression) :
+    CastNode::CastNode(string castType, shared_ptr<Expression> expression, int line, int col) :
+        Expression(line, col),
         mExpression(expression),
         mCastType(castType)
     {
@@ -273,7 +291,8 @@ namespace ast
         return mCastType;
     }
 
-    IntegerLiteralNode::IntegerLiteralNode(int val) :
+    IntegerLiteralNode::IntegerLiteralNode(int val, int line, int col) :
+        Expression(line, col),
         mValue(val)
     {
 
@@ -297,7 +316,8 @@ namespace ast
     }
 
 
-    EmptyStatementNode::EmptyStatementNode()
+    EmptyStatementNode::EmptyStatementNode(int line, int col) :
+        Expression(line, col)
     {
     }
 
@@ -313,7 +333,8 @@ namespace ast
         out << "(Empty Statement)";
     }
 
-    BinaryExpressionNode::BinaryExpressionNode(shared_ptr<Expression> lhs, shared_ptr<Expression> rhs, string op) :
+    BinaryExpressionNode::BinaryExpressionNode(shared_ptr<Expression> lhs, shared_ptr<Expression> rhs, string op, int line, int col) :
+        Expression(line, col),
         mLhs(lhs),
         mRhs(rhs),
         mOp(op)
@@ -351,7 +372,8 @@ namespace ast
         out << ")";
     }
 
-    StringLiteralNode::StringLiteralNode(string val) :
+    StringLiteralNode::StringLiteralNode(string val, int line, int col) :
+        Expression(line, col),
         mValue(val)
     {
     }
@@ -373,7 +395,8 @@ namespace ast
         out << "\"" << mValue << "\"";
     }
 
-    FloatLiteralNode::FloatLiteralNode(double val) :
+    FloatLiteralNode::FloatLiteralNode(double val, int line, int col) :
+        Expression(line, col),
         mValue(val)
     {
     }
@@ -395,7 +418,8 @@ namespace ast
         out << mValue << "f";
     }
 
-    IdentifierNode::IdentifierNode(string val) :
+    IdentifierNode::IdentifierNode(string val, int line, int col) :
+        Expression(line, col),
         mValue(val)
     {
     }
@@ -434,7 +458,8 @@ namespace ast
         return mName;
     }
 
-    FunctionCallNode::FunctionCallNode(string name, vector<shared_ptr<Expression>> args) :
+    FunctionCallNode::FunctionCallNode(string name, vector<shared_ptr<Expression>> args, int line, int col) :
+        Expression(line, col),
         mName(name),
         mArgs(args)
     {
@@ -475,7 +500,8 @@ namespace ast
         }
     }
 
-    IfNode::IfNode(shared_ptr<Expression> condition, shared_ptr<BlockNode> block) :
+    IfNode::IfNode(shared_ptr<Expression> condition, shared_ptr<BlockNode> block, int line, int col) :
+        Expression(line, col),
         mCondition(condition),
         mBlock(block)
     {
@@ -508,7 +534,8 @@ namespace ast
         mBlock->prettyPrint(out, indent + 1);
     }
 
-    IfBlockNode::IfBlockNode(vector<shared_ptr<IfNode>> ifs, shared_ptr<BlockNode> elseBlock) :
+    IfBlockNode::IfBlockNode(vector<shared_ptr<IfNode>> ifs, shared_ptr<BlockNode> elseBlock, int line, int col) :
+        Expression(line, col),
         mIfs(ifs),
         mElseBlock(elseBlock)
     {
@@ -547,7 +574,8 @@ namespace ast
         }
     }
 
-    WhileNode::WhileNode(shared_ptr<Expression> condition, shared_ptr<BlockNode> block) :
+    WhileNode::WhileNode(shared_ptr<Expression> condition, shared_ptr<BlockNode> block, int line, int col) :
+        Expression(line, col),
         mCondition(condition),
         mBlock(block)
     {
@@ -655,7 +683,8 @@ namespace ast
     }
 
     // AllocNode implementation
-    AllocNode::AllocNode(string typeName, vector<shared_ptr<Expression>> args) :
+    AllocNode::AllocNode(string typeName, vector<shared_ptr<Expression>> args, int line, int col) :
+        Expression(line, col),
         mTypeName(typeName),
         mArgs(args)
     {
@@ -690,7 +719,8 @@ namespace ast
     }
 
     // MemberAccessNode implementation
-    MemberAccessNode::MemberAccessNode(shared_ptr<Expression> object, string memberName) :
+    MemberAccessNode::MemberAccessNode(shared_ptr<Expression> object, string memberName, int line, int col) :
+        Expression(line, col),
         mObject(object),
         mMemberName(memberName)
     {
@@ -715,6 +745,115 @@ namespace ast
     {
         mObject->prettyPrint(out, indent);
         out << "." << mMemberName;
+    }
+
+    // QualifiedCallNode implementation
+    QualifiedCallNode::QualifiedCallNode(string namespacePath, string functionName,
+                                         vector<shared_ptr<Expression>> args, int line, int col) :
+        Expression(line, col),
+        mNamespacePath(namespacePath),
+        mFunctionName(functionName),
+        mArgs(args)
+    {
+    }
+
+    string QualifiedCallNode::getNamespacePath() const
+    {
+        return mNamespacePath;
+    }
+
+    string QualifiedCallNode::getFunctionName() const
+    {
+        return mFunctionName;
+    }
+
+    string QualifiedCallNode::getFullyQualifiedName() const
+    {
+        return mNamespacePath + "." + mFunctionName;
+    }
+
+    vector<shared_ptr<Expression>> QualifiedCallNode::getArgs() const
+    {
+        return mArgs;
+    }
+
+    size_t QualifiedCallNode::argCount() const
+    {
+        return mArgs.size();
+    }
+
+    ExpressionType QualifiedCallNode::getExpressionType()
+    {
+        return ExpressionType::QualifiedCall;
+    }
+
+    void QualifiedCallNode::prettyPrint(ostream &out, size_t indent)
+    {
+        out << "Qualified call: " << mNamespacePath << "." << mFunctionName << "(";
+        bool first = true;
+        for (auto it = mArgs.begin(); it != mArgs.end(); ++it)
+        {
+            if (!first) out << ", ";
+            first = false;
+            (*it)->prettyPrint(out, indent);
+        }
+        out << ")";
+    }
+
+    // NamespaceDeclaration implementation
+    NamespaceDeclaration::NamespaceDeclaration(string name,
+                                               vector<shared_ptr<Function>> functions,
+                                               vector<shared_ptr<ClassDeclaration>> classes,
+                                               vector<shared_ptr<NamespaceDeclaration>> nestedNamespaces) :
+        mName(name),
+        mFunctions(functions),
+        mClasses(classes),
+        mNestedNamespaces(nestedNamespaces)
+    {
+    }
+
+    string NamespaceDeclaration::getName() const
+    {
+        return mName;
+    }
+
+    vector<shared_ptr<Function>> NamespaceDeclaration::getFunctions() const
+    {
+        return mFunctions;
+    }
+
+    vector<shared_ptr<ClassDeclaration>> NamespaceDeclaration::getClasses() const
+    {
+        return mClasses;
+    }
+
+    vector<shared_ptr<NamespaceDeclaration>> NamespaceDeclaration::getNestedNamespaces() const
+    {
+        return mNestedNamespaces;
+    }
+
+    void NamespaceDeclaration::prettyPrint(ostream &out, size_t indent)
+    {
+        out << "Namespace: " << mName;
+        ++indent;
+
+        for (auto it = mClasses.begin(); it != mClasses.end(); ++it)
+        {
+            newLine(out, indent);
+            (*it)->prettyPrint(out, indent);
+        }
+
+        for (auto it = mFunctions.begin(); it != mFunctions.end(); ++it)
+        {
+            newLine(out, indent);
+            (*it)->prettyPrint(out, indent);
+        }
+
+        for (auto it = mNestedNamespaces.begin(); it != mNestedNamespaces.end(); ++it)
+        {
+            newLine(out, indent);
+            (*it)->prettyPrint(out, indent);
+        }
     }
 
 }

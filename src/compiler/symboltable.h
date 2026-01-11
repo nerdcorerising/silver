@@ -61,7 +61,7 @@ public:
         value v;
         if (!tryGet(name, v))
         {
-            throw "uh oh!";
+            return value();
         }
 
         return v;

@@ -16,17 +16,17 @@ namespace analysis
         case ExpressionType::IfBlock:
         case ExpressionType::If:
         {
-            OPTIMIZATION_ERROR("Cannot assign result of If to variable");
+            OPTIMIZATION_ERROR_AT(expression, "Cannot assign result of If to variable");
         }
         break;
         case ExpressionType::While:
         {
-            OPTIMIZATION_ERROR("Cannot assign result of loop to variable");
+            OPTIMIZATION_ERROR_AT(expression, "Cannot assign result of loop to variable");
         }
         break;
         case ExpressionType::Block:
         {
-            OPTIMIZATION_ERROR("Cannot assign result of block to variable");
+            OPTIMIZATION_ERROR_AT(expression, "Cannot assign result of block to variable");
         }
         break;
         case ExpressionType::IntegerLiteral:
@@ -46,7 +46,7 @@ namespace analysis
         break;
         case ExpressionType::UnaryOperator:
         {
-            throw "not implemented";
+            throw std::string("not implemented");
             // return ;
         }
         break;
@@ -59,8 +59,8 @@ namespace analysis
             if (lhsType != rhsType)
             {
                 stringstream error;
-                error << "Types " << lhsType << " and " << lhsType << " do not match" << endl;
-                OPTIMIZATION_ERROR(error.str());
+                error << "Types " << lhsType << " and " << rhsType << " do not match";
+                OPTIMIZATION_ERROR_AT(expression, error.str());
             }
 
             return lhsType;
@@ -68,7 +68,7 @@ namespace analysis
         break;
         case ExpressionType::Empty:
         {
-            OPTIMIZATION_ERROR("Cannot assign result of empty statement to variable");
+            OPTIMIZATION_ERROR_AT(expression, "Cannot assign result of empty statement to variable");
         }
         break;
         case ExpressionType::Identifier:
@@ -80,7 +80,7 @@ namespace analysis
         break;
         case ExpressionType::Declaration:
         {
-            OPTIMIZATION_ERROR("Cannot assign result of declaration statement to variable");
+            OPTIMIZATION_ERROR_AT(expression, "Cannot assign result of declaration statement to variable");
         }
         break;
         case ExpressionType::FunctionCall:
@@ -93,7 +93,7 @@ namespace analysis
         break;
         case ExpressionType::Return:
         {
-            OPTIMIZATION_ERROR("Cannot assign result of return statement to variable");
+            OPTIMIZATION_ERROR_AT(expression, "Cannot assign result of return statement to variable");
         }
         break;
         case ExpressionType::Cast:
@@ -118,14 +118,27 @@ namespace analysis
             string fieldType = symbols.get(fieldKey);
             if (fieldType.empty())
             {
-                OPTIMIZATION_ERROR("Unknown field: " + member->getMemberName() + " in type " + objectType);
+                OPTIMIZATION_ERROR_AT(expression, "Unknown field: " + member->getMemberName() + " in type " + objectType);
             }
             return fieldType;
         }
         break;
+        case ExpressionType::QualifiedCall:
+        {
+            shared_ptr<QualifiedCallNode> call = dynamic_pointer_cast<QualifiedCallNode>(expression);
+            // Look up "Namespace.funcName()" in symbol table
+            string funcKey = call->getFullyQualifiedName() + "()";
+            string type = symbols.get(funcKey);
+            if (type.empty())
+            {
+                OPTIMIZATION_ERROR_AT(expression, "Unknown function: " + call->getFullyQualifiedName());
+            }
+            return type;
+        }
+        break;
         default:
         {
-            OPTIMIZATION_ERROR("Unknown type in getTypeForExpression");
+            OPTIMIZATION_ERROR_AT(expression, "Unknown type in getTypeForExpression");
         }
         break;
         }
@@ -151,7 +164,7 @@ namespace analysis
 
                 if (symbols.contains(decl->getName()))
                 {
-                    OPTIMIZATION_ERROR("variable " + decl->getName() + " already declared");
+                    OPTIMIZATION_ERROR_AT(current, "variable " + decl->getName() + " already declared");
                 }
 
                 if (decl->getTypeName() == "")
@@ -199,8 +212,8 @@ namespace analysis
                     if (lhsType != rhsType)
                     {
                         stringstream error;
-                        error << "Cannot assign type " << rhsType << "to variable of type " << lhsType << endl;
-                        OPTIMIZATION_ERROR(error.str());
+                        error << "Cannot assign type " << rhsType << " to variable of type " << lhsType;
+                        OPTIMIZATION_ERROR_AT(current, error.str());
                     }
                 }
             }

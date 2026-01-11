@@ -108,17 +108,109 @@ namespace analysis
         }
     }
 
+    void AnalysisPassManager::defineNamespaces(shared_ptr<Assembly> assembly, SymbolTable<string, string> &symbols)
+    {
+        vector<shared_ptr<NamespaceDeclaration>> namespaces = assembly->getNamespaces();
+        for (auto ns = namespaces.begin(); ns != namespaces.end(); ++ns)
+        {
+            defineNamespaceContents(*ns, symbols, "");
+        }
+    }
+
+    void AnalysisPassManager::defineNamespaceContents(shared_ptr<NamespaceDeclaration> ns, SymbolTable<string, string> &symbols, string parentPath)
+    {
+        string fullPath = parentPath.empty() ? ns->getName() : parentPath + "." + ns->getName();
+
+        // Register namespace exists
+        symbols.put("namespace:" + fullPath, "namespace");
+
+        // Register non-local functions with qualified names (local functions are only accessible within the namespace)
+        vector<shared_ptr<Function>> functions = ns->getFunctions();
+        for (auto func = functions.begin(); func != functions.end(); ++func)
+        {
+            if (!(*func)->isLocal())
+            {
+                string qualifiedName = fullPath + "." + (*func)->getName() + "()";
+                symbols.put(qualifiedName, (*func)->getReturnType());
+            }
+        }
+
+        // Register classes with qualified names
+        vector<shared_ptr<ClassDeclaration>> classes = ns->getClasses();
+        for (auto cls = classes.begin(); cls != classes.end(); ++cls)
+        {
+            string qualifiedClassName = fullPath + "." + (*cls)->getName();
+            symbols.put("class:" + qualifiedClassName, qualifiedClassName);
+
+            // Register fields
+            vector<shared_ptr<Field>> fields = (*cls)->getFields();
+            for (auto field = fields.begin(); field != fields.end(); ++field)
+            {
+                string fieldKey = qualifiedClassName + "." + (*field)->getName();
+                symbols.put(fieldKey, (*field)->getType());
+            }
+        }
+
+        // Recurse into nested namespaces
+        vector<shared_ptr<NamespaceDeclaration>> nested = ns->getNestedNamespaces();
+        for (auto nestedNs = nested.begin(); nestedNs != nested.end(); ++nestedNs)
+        {
+            defineNamespaceContents(*nestedNs, symbols, fullPath);
+        }
+    }
+
+    void AnalysisPassManager::performPassesOnNamespace(shared_ptr<NamespaceDeclaration> ns, SymbolTable<string, string> &symbols, string parentPath)
+    {
+        string currentPath = parentPath.empty() ? ns->getName() : parentPath + "." + ns->getName();
+
+        // Enter a new scope and register local function aliases
+        symbols.enterContext();
+
+        // Register short function names as aliases to qualified names
+        vector<shared_ptr<Function>> functions = ns->getFunctions();
+        for (auto func = functions.begin(); func != functions.end(); ++func)
+        {
+            string shortName = (*func)->getName() + "()";
+            symbols.put(shortName, (*func)->getReturnType());
+        }
+
+        // Process functions in this namespace
+        for (auto func = functions.begin(); func != functions.end(); ++func)
+        {
+            shared_ptr<BlockNode> block = (*func)->getBlock();
+            performPassOnBlock(block, symbols);
+        }
+
+        // Recurse into nested namespaces
+        vector<shared_ptr<NamespaceDeclaration>> nested = ns->getNestedNamespaces();
+        for (auto nestedNs = nested.begin(); nestedNs != nested.end(); ++nestedNs)
+        {
+            performPassesOnNamespace(*nestedNs, symbols, currentPath);
+        }
+
+        symbols.leaveContext();
+    }
+
     void AnalysisPassManager::performPasses(shared_ptr<Assembly> assembly)
     {
         SymbolTable<string, string> symbols;
         defineFunctions(assembly, symbols);
         defineClasses(assembly, symbols);
+        defineNamespaces(assembly, symbols);
 
+        // Process top-level functions
         vector<shared_ptr<Function>> functions = assembly->getFunctions();
         for (auto func = functions.begin(); func != functions.end(); ++func)
         {
             shared_ptr<BlockNode> block = (*func)->getBlock();
             performPassOnBlock(block, symbols);
+        }
+
+        // Process namespace functions
+        vector<shared_ptr<NamespaceDeclaration>> namespaces = assembly->getNamespaces();
+        for (auto ns = namespaces.begin(); ns != namespaces.end(); ++ns)
+        {
+            performPassesOnNamespace(*ns, symbols, "");
         }
     }
 }

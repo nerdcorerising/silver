@@ -216,7 +216,7 @@ namespace parse
         }
     }
 
-    shared_ptr<Function> Parser::parseFunction()
+    shared_ptr<Function> Parser::parseFunction(bool isLocal)
     {
         expectCurrentTokenTypeAndText(TokenType::Keyword, "fn", "Missing function keyword");
 
@@ -243,7 +243,7 @@ namespace parse
 
         shared_ptr<BlockNode> block = parseBlock();
 
-        return shared_ptr<Function>(new Function(block, name, args, returnType));
+        return shared_ptr<Function>(new Function(block, name, args, returnType, isLocal));
     }
 
     shared_ptr<Field> Parser::parseField()
@@ -310,9 +310,81 @@ namespace parse
         return shared_ptr<ClassDeclaration>(new ClassDeclaration(name, fields));
     }
 
+    shared_ptr<NamespaceDeclaration> Parser::parseNamespace()
+    {
+        expectCurrentTokenTypeAndText(TokenType::Keyword, "namespace", "Expected 'namespace' keyword");
+        advance();
+
+        // Parse namespace name (possibly dotted: "Foo.Bar")
+        expectCurrentTokenType(TokenType::Identifier, "Expected namespace name");
+        string fullName = current().text();
+        advance();
+
+        // Handle dotted namespace names: namespace Foo.Bar { }
+        while (current().type() == TokenType::Operator && current().text() == ".")
+        {
+            advance();  // skip dot
+            expectCurrentTokenType(TokenType::Identifier, "Expected namespace name after '.'");
+            fullName += "." + current().text();
+            advance();
+        }
+
+        expectCurrentTokenType(TokenType::LeftBrace, "Expected '{' after namespace name");
+        advance();
+
+        vector<shared_ptr<Function>> functions;
+        vector<shared_ptr<ClassDeclaration>> classes;
+        vector<shared_ptr<NamespaceDeclaration>> nestedNamespaces;
+
+        while (current().type() != TokenType::RightBrace)
+        {
+            if (current().type() == TokenType::Keyword)
+            {
+                if (current().text() == "local")
+                {
+                    advance();
+                    expectCurrentTokenTypeAndText(TokenType::Keyword, "fn", "Expected 'fn' after 'local'");
+                    shared_ptr<Function> func = parseFunction(true);
+                    functions.push_back(func);
+                }
+                else if (current().text() == "fn")
+                {
+                    shared_ptr<Function> func = parseFunction(false);
+                    functions.push_back(func);
+                }
+                else if (current().text() == "class")
+                {
+                    shared_ptr<ClassDeclaration> cls = parseClass();
+                    classes.push_back(cls);
+                }
+                else if (current().text() == "namespace")
+                {
+                    shared_ptr<NamespaceDeclaration> nested = parseNamespace();
+                    nestedNamespaces.push_back(nested);
+                }
+                else
+                {
+                    reportFatalError("Unexpected keyword in namespace: " + current().text());
+                }
+            }
+            else
+            {
+                reportFatalError("Expected function, class, or namespace in namespace body");
+            }
+        }
+
+        expectCurrentTokenType(TokenType::RightBrace, "Expected '}' to close namespace");
+        advance();
+
+        return shared_ptr<NamespaceDeclaration>(
+            new NamespaceDeclaration(fullName, functions, classes, nestedNamespaces));
+    }
+
     shared_ptr<BlockNode> Parser::parseBlock()
     {
         expectCurrentTokenType(TokenType::LeftBrace, "Expected curly brace to open block");
+        int line = current().line();
+        int col = current().column();
         advance();
 
         vector<shared_ptr<Expression>> expressions;
@@ -325,7 +397,7 @@ namespace parse
 
         advance();
 
-        return shared_ptr<BlockNode>(new BlockNode(expressions));
+        return shared_ptr<BlockNode>(new BlockNode(expressions, line, col));
     }
 
     vector<shared_ptr<Expression>> Parser::parseFunctionArgs()
@@ -362,6 +434,8 @@ namespace parse
         shared_ptr<Expression> node;
         double dVal;
         int iVal;
+        int line = current().line();
+        int col = current().column();
 
         // Handle alloc keyword
         if (current().type() == TokenType::Keyword && current().text() == "alloc")
@@ -371,7 +445,7 @@ namespace parse
             string typeName = current().text();
             advance();
             vector<shared_ptr<Expression>> args = parseFunctionArgs();
-            return shared_ptr<Expression>(new AllocNode(typeName, args));
+            return shared_ptr<Expression>(new AllocNode(typeName, args, line, col));
         }
 
         switch (current().type())
@@ -379,7 +453,7 @@ namespace parse
         case TokenType::IntLiteral:
         {
             iVal = stoi(current().text());
-            node = shared_ptr<Expression>(new IntegerLiteralNode(iVal));
+            node = shared_ptr<Expression>(new IntegerLiteralNode(iVal, line, col));
             advance();
         }
             break;
@@ -393,7 +467,7 @@ namespace parse
                 string type = current().text();
                 mTokens.advanceBy(2);
                 shared_ptr<Expression> exp = makeNode();
-                node = shared_ptr<Expression>(new CastNode(type, exp));
+                node = shared_ptr<Expression>(new CastNode(type, exp, line, col));
             }
             else
             {
@@ -406,29 +480,87 @@ namespace parse
             break;
         case TokenType::StringLiteral:
         {
-            node = shared_ptr<Expression>(new StringLiteralNode(current().text()));
+            node = shared_ptr<Expression>(new StringLiteralNode(current().text(), line, col));
             advance();
         }
             break;
         case TokenType::FloatLiteral:
         {
             dVal = stod(current().text());
-            node = shared_ptr<Expression>(new FloatLiteralNode(dVal));
+            node = shared_ptr<Expression>(new FloatLiteralNode(dVal, line, col));
             advance();
         }
             break;
         case TokenType::Identifier:
         {
-            if (lookAhead().type() == TokenType::OpenParens)
+            // Check for qualified call: Identifier.something.func()
+            if (lookAhead().type() == TokenType::Operator && lookAhead().text() == ".")
+            {
+                // Collect the dotted path
+                string path = current().text();
+                advance();  // skip first identifier
+
+                while (current().type() == TokenType::Operator && current().text() == ".")
+                {
+                    advance();  // skip dot
+                    expectCurrentTokenType(TokenType::Identifier, "Expected identifier after '.'");
+                    path += "." + current().text();
+                    advance();
+
+                    // Check if this might be a function call
+                    if (current().type() == TokenType::OpenParens)
+                    {
+                        // It's a qualified call: path ends with function name
+                        // Split path into namespace path and function name
+                        size_t lastDot = path.rfind('.');
+                        string namespacePath = path.substr(0, lastDot);
+                        string funcName = path.substr(lastDot + 1);
+
+                        vector<shared_ptr<Expression>> args = parseFunctionArgs();
+                        node = shared_ptr<Expression>(new QualifiedCallNode(namespacePath, funcName, args, line, col));
+                        break;
+                    }
+                }
+
+                // If we didn't find a function call, it's member access
+                // Create chained MemberAccessNode
+                if (node == nullptr)
+                {
+                    // Parse the path into chained member access
+                    size_t pos = 0;
+                    size_t dotPos = path.find('.');
+                    string firstPart = path.substr(0, dotPos);
+                    node = shared_ptr<Expression>(new IdentifierNode(firstPart, line, col));
+
+                    pos = dotPos + 1;
+                    while (pos < path.size())
+                    {
+                        dotPos = path.find('.', pos);
+                        string part;
+                        if (dotPos == string::npos)
+                        {
+                            part = path.substr(pos);
+                            pos = path.size();
+                        }
+                        else
+                        {
+                            part = path.substr(pos, dotPos - pos);
+                            pos = dotPos + 1;
+                        }
+                        node = shared_ptr<Expression>(new MemberAccessNode(node, part, line, col));
+                    }
+                }
+            }
+            else if (lookAhead().type() == TokenType::OpenParens)
             {
                 string name = current().text();
                 advance();
                 vector<shared_ptr<Expression>> args = parseFunctionArgs();
-                node = shared_ptr<Expression>(new FunctionCallNode(name, args));
+                node = shared_ptr<Expression>(new FunctionCallNode(name, args, line, col));
             }
             else
             {
-                node = shared_ptr<Expression>(new IdentifierNode(current().text()));
+                node = shared_ptr<Expression>(new IdentifierNode(current().text(), line, col));
                 advance();
             }
         }
@@ -492,6 +624,8 @@ namespace parse
         while (current().type() == TokenType::Operator && operatorPrecedence(current()) >= minPrecedence)
         {
             Token op = current();
+            int opLine = op.line();
+            int opCol = op.column();
             advance();
 
             // Special handling for member access operator
@@ -500,7 +634,7 @@ namespace parse
                 expectCurrentTokenType(TokenType::Identifier, "Expected member name after '.'");
                 string memberName = current().text();
                 advance();
-                curr = shared_ptr<Expression>(new MemberAccessNode(curr, memberName));
+                curr = shared_ptr<Expression>(new MemberAccessNode(curr, memberName, opLine, opCol));
                 continue;
             }
 
@@ -511,7 +645,7 @@ namespace parse
                 next = parseStatementHelper(next, operatorPrecedence(current()));
             }
 
-            curr = shared_ptr<Expression>(new BinaryExpressionNode(curr, next, op.text()));
+            curr = shared_ptr<Expression>(new BinaryExpressionNode(curr, next, op.text(), opLine, opCol));
         }
 
         return curr;
@@ -523,8 +657,10 @@ namespace parse
 
         if (curr.type() == TokenType::SemiColon)
         {
+            int line = curr.line();
+            int col = curr.column();
             advance();
-            return shared_ptr<Expression>(new EmptyStatementNode());
+            return shared_ptr<Expression>(new EmptyStatementNode(line, col));
         }
 
         shared_ptr<Expression> node = makeNode();
@@ -553,10 +689,12 @@ namespace parse
             }
             else if (curr.text() == "return")
             {
+                int line = curr.line();
+                int col = curr.column();
                 advance();
                 shared_ptr<Expression> ret = parseStatement();
 
-                shared_ptr<Expression> returnStatement = shared_ptr<Expression>(new ReturnNode(ret));
+                shared_ptr<Expression> returnStatement = shared_ptr<Expression>(new ReturnNode(ret, line, col));
 
                 expectCurrentTokenType(TokenType::SemiColon, "Expected semicolon after statement.");
                 advance();
@@ -606,6 +744,8 @@ namespace parse
     shared_ptr<Expression> Parser::parseWhile()
     {
         CONSISTENCY_CHECK(current().text() == "while", "parseWhile called without while keyword");
+        int line = current().line();
+        int col = current().column();
         // skip while
         advance();
 
@@ -613,12 +753,14 @@ namespace parse
 
         shared_ptr<BlockNode> block = parseBlock();
 
-        return shared_ptr<Expression>(new WhileNode(condition, block));
+        return shared_ptr<Expression>(new WhileNode(condition, block, line, col));
     }
 
     shared_ptr<Expression> Parser::parseIf()
     {
         CONSISTENCY_CHECK(current().text() == "if", "parseIf called without if keyword");
+        int ifBlockLine = current().line();
+        int ifBlockCol = current().column();
         // skip if
         advance();
 
@@ -626,16 +768,18 @@ namespace parse
 
         shared_ptr<Expression> condition = parseIfWhileCondition();
         shared_ptr<BlockNode> block = parseBlock();
-        ifs.push_back(shared_ptr<IfNode>(new IfNode(condition, block)));
+        ifs.push_back(shared_ptr<IfNode>(new IfNode(condition, block, ifBlockLine, ifBlockCol)));
 
         while (current().type() == TokenType::Keyword && current().text() == "elif")
         {
+            int elifLine = current().line();
+            int elifCol = current().column();
             advance();
 
             shared_ptr<Expression> elseIfCondition = parseIfWhileCondition();
             shared_ptr<BlockNode> elseIfBlock = parseBlock();
 
-            shared_ptr<IfNode> elseIfNode = shared_ptr<IfNode>(new IfNode(elseIfCondition, elseIfBlock));
+            shared_ptr<IfNode> elseIfNode = shared_ptr<IfNode>(new IfNode(elseIfCondition, elseIfBlock, elifLine, elifCol));
             ifs.push_back(elseIfNode);
         }
 
@@ -648,12 +792,14 @@ namespace parse
             elseBlock = parseBlock();
         }
 
-        return shared_ptr<Expression>(new IfBlockNode(ifs, elseBlock));
+        return shared_ptr<Expression>(new IfBlockNode(ifs, elseBlock, ifBlockLine, ifBlockCol));
     }
 
     shared_ptr<Expression> Parser::parseLet()
     {
         CONSISTENCY_CHECK(current().text() == "let", "parseLet called without let keyword");
+        int line = current().line();
+        int col = current().column();
 
         // skip let keyword
         advance();
@@ -692,13 +838,14 @@ namespace parse
             reportFatalError("Expected : or = after let");
         }
 
-        return shared_ptr<Expression>(new DeclarationNode(name, type, expression));
+        return shared_ptr<Expression>(new DeclarationNode(name, type, expression, line, col));
     }
 
     shared_ptr<Assembly> Parser::parse()
     {
         vector<shared_ptr<Function>> functions;
         vector<shared_ptr<ClassDeclaration>> classes;
+        vector<shared_ptr<NamespaceDeclaration>> namespaces;
 
         while (mTokens.hasInput())
         {
@@ -712,13 +859,19 @@ namespace parse
                 shared_ptr<ClassDeclaration> classDecl = parseClass();
                 classes.push_back(classDecl);
             }
+            else if (current().type() == TokenType::Keyword && current().text() == "namespace")
+            {
+                shared_ptr<NamespaceDeclaration> ns = parseNamespace();
+                namespaces.push_back(ns);
+            }
             else
             {
-                shared_ptr<Function> function = parseFunction();
+                // Top-level functions cannot be local (no namespace to restrict to)
+                shared_ptr<Function> function = parseFunction(false);
                 functions.push_back(function);
             }
         }
 
-        return shared_ptr<Assembly>(new Assembly(mName, functions, classes));
+        return shared_ptr<Assembly>(new Assembly(mName, functions, classes, namespaces));
     }
 }

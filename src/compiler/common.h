@@ -12,5 +12,4 @@
 
 #define UNREFERENCED(X) (void)(X)
 
-#define CONSISTENCY_CHECK(COND, X) do { if (!(COND)) { cout << X; throw "Error handling not implemented"; } } while (false)
-
+#define CONSISTENCY_CHECK(COND, X) do { if (!(COND)) { cout << X; throw std::string("Error handling not implemented"); } } while (false)

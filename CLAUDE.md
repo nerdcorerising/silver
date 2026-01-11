@@ -87,6 +87,6 @@ Strings in Silver are UTF-8 encoded. The following escape sequences are supporte
 
 ### String Runtime Functions
 
-- `silver_strlen_utf8(s: string) -> int` - Returns the number of Unicode codepoints in the string
-- `silver_string_bytes(s: string) -> int` - Returns the number of bytes in the string
-- `silver_strcmp(a: string, b: string) -> int` - Returns 1 if strings are equal, 0 otherwise
+- `strlen_utf8(s: string) -> int` - Returns the number of Unicode codepoints in the string
+- `string_bytes(s: string) -> int` - Returns the number of bytes in the string
+- `strcmp(a: string, b: string) -> int` - Returns 1 if strings are equal, 0 otherwise

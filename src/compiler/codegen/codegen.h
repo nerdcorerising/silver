@@ -6,6 +6,7 @@
 #include <fstream>
 #include <memory>
 #include <map>
+#include <set>
 
 #pragma warning (push, 1)
 #pragma warning(disable:4996)   // deprecated functions
@@ -61,9 +62,13 @@ namespace codegen
         std::map<std::string, llvm::Function *> mFunctions;
         std::map<std::string, llvm::StructType *> mStructTypes;
         std::map<std::string, std::shared_ptr<ast::ClassDeclaration>> mClasses;
+        std::set<std::string> mLocalFunctions;  // Mangled names of local functions
 
         // Stack of ref-counted variables per scope (for generating release calls)
         std::vector<std::vector<std::string>> mRefCountedVarsStack;
+
+        // Current namespace path for resolving local function calls
+        std::string mCurrentNamespace;
 
         bool mOptimize;
         llvm::LLVMContext mContext;
@@ -75,6 +80,7 @@ namespace codegen
         void addSystemCalls();
 
         void reportFatalError(std::string message);
+        void reportFatalError(std::string message, std::shared_ptr<ast::Expression> expr);
 
         void putFunc(std::string name, llvm::Function *func);
         llvm::Function *getFunc(std::string name);
@@ -85,14 +91,20 @@ namespace codegen
         void generateClassTypes(std::shared_ptr<ast::Assembly> assembly);
         void generateAssembly(std::shared_ptr<ast::Assembly> assembly);
         llvm::Function *generateFunctionPrototype(std::shared_ptr<ast::Function> function);
+        llvm::Function *generateFunctionPrototypeWithName(std::shared_ptr<ast::Function> function, std::string mangledName);
         llvm::Value *generateFunction(std::shared_ptr<ast::Function> function);
+        llvm::Value *generateFunctionWithName(std::shared_ptr<ast::Function> function, std::string mangledName);
         llvm::Value *generateExpression(std::shared_ptr<ast::Expression> expression);
         llvm::Value *generateBinaryExpression(std::shared_ptr<ast::BinaryExpressionNode> expression);
         llvm::Value *generateIntegerMath(std::string op, llvm::Value *lhs, llvm::Value *rhs);
         llvm::Value *generateFloatingPointMath(std::string op, llvm::Value *lhs, llvm::Value *rhs);
         llvm::Value *generateFunctionCall(std::shared_ptr<ast::FunctionCallNode> expression);
+        llvm::Value *generateQualifiedCall(std::shared_ptr<ast::QualifiedCallNode> expression);
         llvm::Value *generateAlloc(std::shared_ptr<ast::AllocNode> allocNode);
         llvm::Value *generateMemberAccess(std::shared_ptr<ast::MemberAccessNode> memberNode);
+        void generateNamespacePrototypes(std::shared_ptr<ast::NamespaceDeclaration> ns, std::string parentPath);
+        void generateNamespaceBodies(std::shared_ptr<ast::NamespaceDeclaration> ns, std::string parentPath);
+        std::string mangleName(std::string namespacePath, std::string funcName);
         void generateIf(std::shared_ptr<ast::IfBlockNode> ifNode);
         void generateWhile(std::shared_ptr<ast::WhileNode> whileNode);
         llvm::Value *generateBlock(std::shared_ptr<ast::BlockNode> block, llvm::Function * llvmFunc);

@@ -81,71 +81,85 @@ namespace codegen
         llvm::Type *i8PtrTy = llvm::PointerType::get(mContext, 0);
         llvm::Type *doubleTy = llvm::Type::getDoubleTy(mContext);
 
-        // silver_print_string(const char* s) -> void
+        // print_string(const char* s) -> void
         llvm::FunctionType *printStringTy = llvm::FunctionType::get(voidTy, {i8PtrTy}, false);
         llvm::Function *printStringFunc = llvm::Function::Create(
             printStringTy, llvm::Function::ExternalLinkage, "silver_print_string", mModule);
-        putFunc("silver_print_string", printStringFunc);
+        putFunc("print_string", printStringFunc);
 
-        // silver_print_int(int n) -> void
+        // print_int(int n) -> void
         llvm::FunctionType *printIntTy = llvm::FunctionType::get(voidTy, {i32Ty}, false);
         llvm::Function *printIntFunc = llvm::Function::Create(
             printIntTy, llvm::Function::ExternalLinkage, "silver_print_int", mModule);
-        putFunc("silver_print_int", printIntFunc);
+        putFunc("print_int", printIntFunc);
 
-        // silver_print_float(double f) -> void
+        // print_float(double f) -> void
         llvm::FunctionType *printFloatTy = llvm::FunctionType::get(voidTy, {doubleTy}, false);
         llvm::Function *printFloatFunc = llvm::Function::Create(
             printFloatTy, llvm::Function::ExternalLinkage, "silver_print_float", mModule);
-        putFunc("silver_print_float", printFloatFunc);
+        putFunc("print_float", printFloatFunc);
 
-        // silver_strcmp(const char* a, const char* b) -> int (1 if equal, 0 if not)
+        // strcmp(const char* a, const char* b) -> int (1 if equal, 0 if not)
         llvm::FunctionType *strcmpTy = llvm::FunctionType::get(i32Ty, {i8PtrTy, i8PtrTy}, false);
         llvm::Function *strcmpFunc = llvm::Function::Create(
             strcmpTy, llvm::Function::ExternalLinkage, "silver_strcmp", mModule);
-        putFunc("silver_strcmp", strcmpFunc);
+        putFunc("strcmp", strcmpFunc);
 
-        // silver_retain(void* ptr) -> void (increment ref count)
+        // retain(void* ptr) -> void (increment ref count)
         llvm::FunctionType *retainTy = llvm::FunctionType::get(voidTy, {i8PtrTy}, false);
         llvm::Function *retainFunc = llvm::Function::Create(
             retainTy, llvm::Function::ExternalLinkage, "silver_retain", mModule);
-        putFunc("silver_retain", retainFunc);
+        putFunc("retain", retainFunc);
 
-        // silver_release(void* ptr) -> void (decrement ref count, free if zero)
+        // release(void* ptr) -> void (decrement ref count, free if zero)
         llvm::FunctionType *releaseTy = llvm::FunctionType::get(voidTy, {i8PtrTy}, false);
         llvm::Function *releaseFunc = llvm::Function::Create(
             releaseTy, llvm::Function::ExternalLinkage, "silver_release", mModule);
-        putFunc("silver_release", releaseFunc);
+        putFunc("release", releaseFunc);
 
-        // silver_alloc(size_t size) -> void* (allocate memory with ref count header)
+        // alloc(size_t size) -> void* (allocate memory with ref count header)
         llvm::Type *i64Ty = llvm::Type::getInt64Ty(mContext);
         llvm::FunctionType *allocTy = llvm::FunctionType::get(i8PtrTy, {i64Ty}, false);
         llvm::Function *allocFunc = llvm::Function::Create(
             allocTy, llvm::Function::ExternalLinkage, "silver_alloc", mModule);
-        putFunc("silver_alloc", allocFunc);
+        putFunc("alloc", allocFunc);
 
-        // silver_refcount(void* ptr) -> int (get current ref count for debugging/testing)
+        // refcount(void* ptr) -> int (get current ref count for debugging/testing)
         llvm::FunctionType *refcountTy = llvm::FunctionType::get(i32Ty, {i8PtrTy}, false);
         llvm::Function *refcountFunc = llvm::Function::Create(
             refcountTy, llvm::Function::ExternalLinkage, "silver_refcount", mModule);
-        putFunc("silver_refcount", refcountFunc);
+        putFunc("refcount", refcountFunc);
 
-        // silver_strlen_utf8(const char* s) -> int (count UTF-8 codepoints)
+        // strlen_utf8(const char* s) -> int (count UTF-8 codepoints)
         llvm::FunctionType *strlenUtf8Ty = llvm::FunctionType::get(i32Ty, {i8PtrTy}, false);
         llvm::Function *strlenUtf8Func = llvm::Function::Create(
             strlenUtf8Ty, llvm::Function::ExternalLinkage, "silver_strlen_utf8", mModule);
-        putFunc("silver_strlen_utf8", strlenUtf8Func);
+        putFunc("strlen_utf8", strlenUtf8Func);
 
-        // silver_string_bytes(const char* s) -> int (count bytes)
+        // string_bytes(const char* s) -> int (count bytes)
         llvm::FunctionType *stringBytesTy = llvm::FunctionType::get(i32Ty, {i8PtrTy}, false);
         llvm::Function *stringBytesFunc = llvm::Function::Create(
             stringBytesTy, llvm::Function::ExternalLinkage, "silver_string_bytes", mModule);
-        putFunc("silver_string_bytes", stringBytesFunc);
+        putFunc("string_bytes", stringBytesFunc);
     }
 
     void CodeGen::reportFatalError(string message)
     {
         fprintf(stderr, "Error during codegen phase: %s\n", message.c_str());
+        throw message;
+    }
+
+    void CodeGen::reportFatalError(string message, shared_ptr<ast::Expression> expr)
+    {
+        if (expr && expr->line() > 0)
+        {
+            fprintf(stderr, "Error at line %d, column %d: %s\n",
+                    expr->line(), expr->column(), message.c_str());
+        }
+        else
+        {
+            fprintf(stderr, "Error during codegen phase: %s\n", message.c_str());
+        }
         throw message;
     }
 
@@ -173,7 +187,7 @@ namespace codegen
 
     void CodeGen::generateRetain(llvm::Value* ptr)
     {
-        llvm::Function* retainFunc = getFunc("silver_retain");
+        llvm::Function* retainFunc = getFunc("retain");
         if (retainFunc)
         {
             // Cast to i8* if needed
@@ -185,7 +199,7 @@ namespace codegen
 
     void CodeGen::generateRelease(llvm::Value* ptr)
     {
-        llvm::Function* releaseFunc = getFunc("silver_release");
+        llvm::Function* releaseFunc = getFunc("release");
         if (releaseFunc)
         {
             // Cast to i8* if needed
@@ -353,18 +367,32 @@ namespace codegen
     {
         addSystemCalls();
 
+        // Generate all prototypes first (regular functions)
         vector<shared_ptr<Function>> functions = assembly->getFunctions();
-
         for (auto it = functions.begin(); it != functions.end(); ++it)
         {
             shared_ptr<Function> function = *it;
             generateFunctionPrototype(function);
         }
 
+        // Generate namespace function prototypes
+        vector<shared_ptr<NamespaceDeclaration>> namespaces = assembly->getNamespaces();
+        for (auto it = namespaces.begin(); it != namespaces.end(); ++it)
+        {
+            generateNamespacePrototypes(*it, "");
+        }
+
+        // Generate all function bodies (regular functions)
         for (auto it = functions.begin(); it != functions.end(); ++it)
         {
             shared_ptr<Function> function = *it;
             generateFunction(function);
+        }
+
+        // Generate namespace function bodies
+        for (auto it = namespaces.begin(); it != namespaces.end(); ++it)
+        {
+            generateNamespaceBodies(*it, "");
         }
     }
 
@@ -390,6 +418,140 @@ namespace codegen
         }
 
         return llvmFunc;
+    }
+
+    string CodeGen::mangleName(string namespacePath, string funcName)
+    {
+        // Replace dots with underscores: "Math.Advanced" + "add" -> "Math_Advanced_add"
+        string mangled = namespacePath;
+        for (size_t i = 0; i < mangled.size(); ++i)
+        {
+            if (mangled[i] == '.')
+            {
+                mangled[i] = '_';
+            }
+        }
+        return mangled + "_" + funcName;
+    }
+
+    llvm::Function *CodeGen::generateFunctionPrototypeWithName(shared_ptr<Function> function, string mangledName)
+    {
+        llvm::Type *retType = stringToType(function->getReturnType());
+        vector<llvm::Type *> argTypes = getFunctionArgumentTypes(function);
+        llvm::FunctionType *type = llvm::FunctionType::get(retType, argTypes, false);
+
+        llvm::Value *funcVal = mModule->getOrInsertFunction(mangledName, type).getCallee();
+        llvm::Function *llvmFunc = llvm::cast<llvm::Function>(funcVal);
+        putFunc(mangledName, llvmFunc);
+
+        return llvmFunc;
+    }
+
+    llvm::Value *CodeGen::generateFunctionWithName(shared_ptr<Function> function, string mangledName)
+    {
+        LOG("Codegen: Generating namespaced function %s\n", mangledName.c_str());
+        mTable.enterContext();
+        mVariableTypes.enterContext();
+        llvm::Function *llvmFunc = getFunc(mangledName);
+        if (llvmFunc == nullptr)
+        {
+            reportFatalError("Undefined function " + mangledName + " referenced");
+            return nullptr;
+        }
+
+        llvm::BasicBlock::Create(mContext, "entry", llvmFunc, 0);
+
+        size_t i = 0;
+        auto it = llvmFunc->arg_begin();
+        for ( ; it != llvmFunc->arg_end(); ++it, ++i)
+        {
+            shared_ptr<Argument> a = function->getArguments()[i];
+            llvm::IRBuilder<> temp(&llvmFunc->getEntryBlock(), llvmFunc->getEntryBlock().begin());
+            llvm::AllocaInst *inst = temp.CreateAlloca(stringToType(a->getType()), 0, a->getName());
+
+            temp.CreateStore(&(*it), inst);
+
+            mTable.put(a->getName(), inst);
+            mVariableTypes.put(a->getName(), a->getType());
+        }
+
+        generateBlock(function->getBlock(), llvmFunc);
+
+        // For void functions without explicit return, add implicit ret void
+        llvm::BasicBlock *lastBlock = &llvmFunc->back();
+        if (lastBlock->getTerminator() == nullptr)
+        {
+            if (function->getReturnType() == "void")
+            {
+                mBuilder.SetInsertPoint(lastBlock);
+                mBuilder.CreateRetVoid();
+            }
+            else
+            {
+                reportFatalError("Non-void function " + mangledName + " missing return statement");
+            }
+        }
+
+        if (mOptimize)
+        {
+            mFpm->run(*llvmFunc);
+        }
+
+        mVariableTypes.leaveContext();
+        mTable.leaveContext();
+        return llvmFunc;
+    }
+
+    void CodeGen::generateNamespacePrototypes(shared_ptr<NamespaceDeclaration> ns, string parentPath)
+    {
+        string currentPath = parentPath.empty() ? ns->getName() : parentPath + "." + ns->getName();
+
+        // Generate function prototypes
+        vector<shared_ptr<Function>> functions = ns->getFunctions();
+        for (auto it = functions.begin(); it != functions.end(); ++it)
+        {
+            shared_ptr<Function> func = *it;
+            string mangledName = mangleName(currentPath, func->getName());
+            generateFunctionPrototypeWithName(func, mangledName);
+
+            // Track local functions
+            if (func->isLocal())
+            {
+                mLocalFunctions.insert(mangledName);
+            }
+        }
+
+        // Recurse into nested namespaces
+        vector<shared_ptr<NamespaceDeclaration>> nested = ns->getNestedNamespaces();
+        for (auto it = nested.begin(); it != nested.end(); ++it)
+        {
+            generateNamespacePrototypes(*it, currentPath);
+        }
+    }
+
+    void CodeGen::generateNamespaceBodies(shared_ptr<NamespaceDeclaration> ns, string parentPath)
+    {
+        string currentPath = parentPath.empty() ? ns->getName() : parentPath + "." + ns->getName();
+        string previousNamespace = mCurrentNamespace;
+        mCurrentNamespace = currentPath;
+
+        // Generate function bodies
+        vector<shared_ptr<Function>> functions = ns->getFunctions();
+        for (auto it = functions.begin(); it != functions.end(); ++it)
+        {
+            shared_ptr<Function> func = *it;
+            string mangledName = mangleName(currentPath, func->getName());
+            generateFunctionWithName(func, mangledName);
+        }
+
+        // Recurse into nested namespaces
+        vector<shared_ptr<NamespaceDeclaration>> nested = ns->getNestedNamespaces();
+        for (auto it = nested.begin(); it != nested.end(); ++it)
+        {
+            generateNamespaceBodies(*it, currentPath);
+        }
+
+        mCurrentNamespace = previousNamespace;
     }
 
     llvm::Value *CodeGen::generateFunction(shared_ptr<Function> function)
@@ -473,13 +635,13 @@ namespace codegen
             if (binLhs == nullptr)
             {
                 // only can store to variable.
-                reportFatalError("Found a store with a null assignment");
+                reportFatalError("Found a store with a null assignment", expression);
                 return nullptr;
             }
 
             if (binLhs->getExpressionType() != Identifier && binLhs->getExpressionType() != Declaration)
             {
-                reportFatalError("Cannot assign a value to a non-identifier type.");
+                reportFatalError("Cannot assign a value to a non-identifier type.", expression);
                 return nullptr;
             }
 
@@ -523,14 +685,14 @@ namespace codegen
             // String comparison - call runtime strcmp function
             if (op == "==" || op == "!=")
             {
-                llvm::Function *strcmpFunc = getFunc("silver_strcmp");
+                llvm::Function *strcmpFunc = getFunc("strcmp");
                 if (strcmpFunc == nullptr)
                 {
-                    reportFatalError("silver_strcmp function not found");
+                    reportFatalError("strcmp function not found");
                     return nullptr;
                 }
 
-                // Call silver_strcmp(lhs, rhs) - returns i32 (1 if equal, 0 if not)
+                // Call strcmp(lhs, rhs) - returns i32 (1 if equal, 0 if not)
                 std::vector<llvm::Value*> args;
                 args.push_back(lhs);
                 args.push_back(rhs);
@@ -550,13 +712,13 @@ namespace codegen
             }
             else
             {
-                reportFatalError("Unsupported pointer operation: " + op);
+                reportFatalError("Unsupported pointer operation: " + op, expression);
                 return nullptr;
             }
         }
         else
         {
-            reportFatalError("Type mismatch in binary expression");
+            reportFatalError("Type mismatch in binary expression", expression);
             return nullptr;
         }
 
@@ -689,10 +851,24 @@ namespace codegen
     {
         shared_ptr<FunctionCallNode> call = dynamic_pointer_cast<FunctionCallNode>(expression);
 
-        llvm::Function *func = getFunc(call->getName());
+        llvm::Function *func = nullptr;
+
+        // If we're inside a namespace, try namespace-local lookup first
+        if (!mCurrentNamespace.empty())
+        {
+            string mangledName = mangleName(mCurrentNamespace, call->getName());
+            func = getFunc(mangledName);
+        }
+
+        // Fall back to global lookup
         if (func == nullptr)
         {
-            reportFatalError("Function " + call->getName() + " is not defined.");
+            func = getFunc(call->getName());
+        }
+
+        if (func == nullptr)
+        {
+            reportFatalError("Function " + call->getName() + " is not defined.", call);
             return nullptr;
         }
 
@@ -703,12 +879,43 @@ namespace codegen
             llvm::Value *arg = generateExpression(argNode);
 
             // Cast struct pointers to i8* for runtime functions that expect void*
-            if (call->getName() == "silver_refcount" && arg->getType()->isPointerTy())
+            if (call->getName() == "refcount" && arg->getType()->isPointerTy())
             {
                 arg = mBuilder.CreateBitCast(arg,
                     llvm::PointerType::get(mContext, 0));
             }
 
+            args.push_back(arg);
+        }
+
+        return mBuilder.CreateCall(func, args);
+    }
+
+    llvm::Value *CodeGen::generateQualifiedCall(shared_ptr<QualifiedCallNode> expression)
+    {
+        // Mangle the qualified name: "Math.Advanced" + "add" -> "Math_Advanced_add"
+        string mangledName = mangleName(expression->getNamespacePath(), expression->getFunctionName());
+
+        // Check if this is a local function (local functions can only be called from within their namespace)
+        if (mLocalFunctions.find(mangledName) != mLocalFunctions.end())
+        {
+            reportFatalError("Function " + expression->getFullyQualifiedName() +
+                " is local and can only be called from within its namespace.", expression);
+            return nullptr;
+        }
+
+        llvm::Function *func = getFunc(mangledName);
+        if (func == nullptr)
+        {
+            reportFatalError("Function " + expression->getFullyQualifiedName() + " is not defined.", expression);
+            return nullptr;
+        }
+
+        vector<llvm::Value *> args;
+        for (size_t i = 0; i < expression->argCount(); ++i)
+        {
+            shared_ptr<Expression> argNode = dynamic_pointer_cast<Expression>(expression->getArgs()[i]);
+            llvm::Value *arg = generateExpression(argNode);
             args.push_back(arg);
         }
 
@@ -723,7 +930,7 @@ namespace codegen
         auto structIt = mStructTypes.find(typeName);
         if (structIt == mStructTypes.end())
         {
-            reportFatalError("Unknown type in alloc: " + typeName);
+            reportFatalError("Unknown type in alloc: " + typeName, allocNode);
             return nullptr;
         }
         llvm::StructType *structType = structIt->second;
@@ -732,7 +939,7 @@ namespace codegen
         auto classIt = mClasses.find(typeName);
         if (classIt == mClasses.end())
         {
-            reportFatalError("Unknown class in alloc: " + typeName);
+            reportFatalError("Unknown class in alloc: " + typeName, allocNode);
             return nullptr;
         }
         shared_ptr<ClassDeclaration> classDecl = classIt->second;
@@ -743,10 +950,10 @@ namespace codegen
         uint64_t structSize = dataLayout.getTypeAllocSize(structType);
 
         // Allocate memory on the heap via silver_alloc (includes ref count header, starts at refcount=1)
-        llvm::Function *allocFunc = getFunc("silver_alloc");
+        llvm::Function *allocFunc = getFunc("alloc");
         if (allocFunc == nullptr)
         {
-            reportFatalError("silver_alloc function not found");
+            reportFatalError("alloc function not found");
             return nullptr;
         }
 
@@ -761,7 +968,7 @@ namespace codegen
         vector<shared_ptr<Expression>> args = allocNode->getArgs();
         if (args.size() != fields.size())
         {
-            reportFatalError("Alloc argument count doesn't match field count for " + typeName);
+            reportFatalError("Alloc argument count doesn't match field count for " + typeName, allocNode);
             return nullptr;
         }
 
@@ -798,7 +1005,7 @@ namespace codegen
             typeName = mVariableTypes.get(varName);
             if (typeName.empty())
             {
-                reportFatalError("Unknown variable in member access: " + varName);
+                reportFatalError("Unknown variable in member access: " + varName, memberNode);
                 return nullptr;
             }
 
@@ -808,7 +1015,7 @@ namespace codegen
         }
         else
         {
-            reportFatalError("Member access on non-identifier expression not yet supported");
+            reportFatalError("Member access on non-identifier expression not yet supported", memberNode);
             return nullptr;
         }
 
@@ -816,7 +1023,7 @@ namespace codegen
         auto structIt = mStructTypes.find(typeName);
         if (structIt == mStructTypes.end())
         {
-            reportFatalError("Unknown struct type in member access: " + typeName);
+            reportFatalError("Unknown struct type in member access: " + typeName, memberNode);
             return nullptr;
         }
         llvm::StructType *structType = structIt->second;
@@ -825,7 +1032,7 @@ namespace codegen
         auto classIt = mClasses.find(typeName);
         if (classIt == mClasses.end())
         {
-            reportFatalError("Unknown class in member access: " + typeName);
+            reportFatalError("Unknown class in member access: " + typeName, memberNode);
             return nullptr;
         }
         shared_ptr<ClassDeclaration> classDecl = classIt->second;
@@ -835,7 +1042,7 @@ namespace codegen
         size_t fieldIndex = classDecl->getFieldIndex(memberName);
         if (fieldIndex == (size_t)-1)
         {
-            reportFatalError("Unknown field: " + memberName + " in class " + typeName);
+            reportFatalError("Unknown field: " + memberName + " in class " + typeName, memberNode);
             return nullptr;
         }
 
@@ -857,7 +1064,7 @@ namespace codegen
         }
         else
         {
-            reportFatalError("Unsupported field type in member access: " + fieldTypeName);
+            reportFatalError("Unsupported field type in member access: " + fieldTypeName, memberNode);
             return nullptr;
         }
 
@@ -1043,7 +1250,7 @@ namespace codegen
         }
         case ExpressionType::UnaryOperator:
         {
-            reportFatalError("not implemented");
+            reportFatalError("Unary operators not implemented", expression);
             return nullptr;
         }
         case ExpressionType::BinaryOperator:
@@ -1126,7 +1333,7 @@ namespace codegen
             }
             else
             {
-                reportFatalError("unsupported cast");
+                reportFatalError("Unsupported cast type: " + cast->getCastType(), expression);
                 return nullptr;
             }
         }
@@ -1134,6 +1341,11 @@ namespace codegen
         {
             shared_ptr<FunctionCallNode> fcn = dynamic_pointer_cast<FunctionCallNode>(expression);
             return generateFunctionCall(fcn);
+        }
+        case ExpressionType::QualifiedCall:
+        {
+            shared_ptr<QualifiedCallNode> qcn = dynamic_pointer_cast<QualifiedCallNode>(expression);
+            return generateQualifiedCall(qcn);
         }
         case ExpressionType::Empty:
             return nullptr;
@@ -1165,7 +1377,7 @@ namespace codegen
         }
         default:
         {
-            reportFatalError("Unknown expression type in codegen");
+            reportFatalError("Unknown expression type in codegen", expression);
             return nullptr;
         }
         }
