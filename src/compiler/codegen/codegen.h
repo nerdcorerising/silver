@@ -62,6 +62,7 @@ namespace codegen
         // Stack of ref-counted variables per scope (for generating release calls)
         std::vector<std::vector<std::string>> mRefCountedVarsStack;
 
+        bool mOptimize;
         llvm::LLVMContext mContext;
         llvm::Module *mModule;
         llvm::Function *mMain;
@@ -105,6 +106,7 @@ namespace codegen
     public:
         CodeGen(std::shared_ptr<ast::Assembly> tree, std::string outFile="");
 
+        void setOptimize(bool optimize) { mOptimize = optimize; }
         void generate();
         int runJit();
         bool compileToExecutable(const std::string& outputPath);

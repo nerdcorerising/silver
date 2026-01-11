@@ -23,7 +23,8 @@ public:
         runJit(false),
         genByteCode(false),
         compile(false),
-        verbose(false)
+        verbose(false),
+        optimize(false)
     {
         buildType = BuildType::Debug;
     }
@@ -32,6 +33,7 @@ public:
     bool genByteCode;
     bool compile;
     bool verbose;
+    bool optimize;
     string outputName;
     BuildType buildType;
 };
@@ -82,6 +84,10 @@ Opts getOpts(int argc, char **argv)
             else if (realArg == "verbose" || realArg == "v")
             {
                 opt.verbose = true;
+            }
+            else if (realArg == "optimize" || realArg == "o")
+            {
+                opt.optimize = true;
             }
         }
     }
@@ -148,6 +154,7 @@ int main(int argc, char **argv)
         }
 
         CodeGen gen(node, out);
+        gen.setOptimize(opt.optimize);
         gen.generate();
 
         if (opt.runJit)

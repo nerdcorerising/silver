@@ -39,6 +39,7 @@ namespace codegen
         mTree(tree),
         mTable(),
         mFunctions(),
+        mOptimize(false),
         mContext(),
         mModule(nullptr),
         mMain(nullptr),
@@ -411,7 +412,10 @@ namespace codegen
             llvmFunc->print(llvm::errs());
         }
 
-        mFpm->run(*llvmFunc);
+        if (mOptimize)
+        {
+            mFpm->run(*llvmFunc);
+        }
         LOG("Codegen: Finished function %s\n", function->getName().c_str());
 
         mTable.leaveContext();
