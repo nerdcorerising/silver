@@ -4,6 +4,56 @@ import sys
 import subprocess
 import glob
 
+def run_single_test(silver_exe, test_path, exe_ext, optimize, ret_code):
+    """Run a single test with or without optimization. Returns (passed, error_msg)"""
+    test_name = os.path.splitext(test_path)[0]
+    test_exe = test_name + exe_ext
+    mode = "optimized" if optimize else "unoptimized"
+
+    # Build compile command
+    compile_cmd = [silver_exe, test_path]
+    if optimize:
+        compile_cmd.append("-optimize")
+
+    # Step 1: Compile the .sl file to an executable
+    compile_result = subprocess.run(
+        compile_cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+    if compile_result.returncode != 0:
+        return (False, f"compilation failed ({mode}) with code {compile_result.returncode}")
+
+    # Check if executable was created
+    if not os.path.exists(test_exe):
+        return (False, f"compiled executable {test_exe} not found ({mode})")
+
+    # Step 2: Run the compiled executable
+    run_result = subprocess.run(
+        [test_exe],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+    # Clean up the compiled executable
+    try:
+        os.remove(test_exe)
+        # Also clean up .lib and .exp files that link.exe creates
+        lib_file = test_name + ".lib"
+        exp_file = test_name + ".exp"
+        if os.path.exists(lib_file):
+            os.remove(lib_file)
+        if os.path.exists(exp_file):
+            os.remove(exp_file)
+    except:
+        pass
+
+    if run_result.returncode != ret_code:
+        return (False, f"expected code {ret_code} but got {run_result.returncode} ({mode})")
+
+    return (True, None)
+
 def run_tests():
     # Determine the correct executable name based on platform
     if sys.platform == "win32":
@@ -19,62 +69,33 @@ def run_tests():
         sys.exit(1)
 
     tests = glob.glob("programs/*.sl")
-    print(f"Running silver tests...")
+    print(f"Running silver tests (both optimized and unoptimized)...")
 
     ret_code = 50
     passed = 0
     failed = 0
+
     for test_path in tests:
-        # Get the output executable path (same name as .sl but with .exe)
-        test_name = os.path.splitext(test_path)[0]
-        test_exe = test_name + exe_ext
+        test_passed = True
 
-        # Step 1: Compile the .sl file to an executable
-        compile_result = subprocess.run(
-            [silver_exe, test_path],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-
-        if compile_result.returncode != 0:
+        # Run unoptimized
+        success, error = run_single_test(silver_exe, test_path, exe_ext, False, ret_code)
+        if not success:
             print(f"    {test_path} failed")
-            print(f"        Reason: compilation failed with code {compile_result.returncode}")
-            failed += 1
-            continue
+            print(f"        Reason: {error}")
+            test_passed = False
 
-        # Check if executable was created
-        if not os.path.exists(test_exe):
+        # Run optimized
+        success, error = run_single_test(silver_exe, test_path, exe_ext, True, ret_code)
+        if not success:
             print(f"    {test_path} failed")
-            print(f"        Reason: compiled executable {test_exe} not found")
-            failed += 1
-            continue
+            print(f"        Reason: {error}")
+            test_passed = False
 
-        # Step 2: Run the compiled executable
-        run_result = subprocess.run(
-            [test_exe],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-
-        if run_result.returncode != ret_code:
-            print(f"    {test_path} failed")
-            print(f"        Reason: expected code {ret_code} but got {run_result.returncode}")
-            failed += 1
-        else:
+        if test_passed:
             passed += 1
-
-        # Clean up the compiled executable
-        try:
-            os.remove(test_exe)
-            # Also clean up .lib and .exp files that link.exe creates
-            lib_file = test_name + ".lib"
-            exp_file = test_name + ".exp"
-            if os.path.exists(lib_file):
-                os.remove(lib_file)
-            if os.path.exists(exp_file):
-                os.remove(exp_file)
-        except:
-            pass
+        else:
+            failed += 1
 
     print(f"Results: {passed} passed, {failed} failed")
     return failed
