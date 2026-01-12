@@ -4,7 +4,7 @@ include_directories(".")
 
 set(PARSER_SOURCES parser/parser.cpp parser/tokenizer.cpp parser/tokenmanager.cpp)
 set(AST_SOURCES ast/ast.cpp)
-set(ANALYSIS_SOURCES passes/analysispass.cpp passes/hoistdeclarationpass.cpp passes/typeinferencepass.cpp passes/referencecounting.cpp)
+set(ANALYSIS_SOURCES passes/analysispass.cpp passes/hoistdeclarationpass.cpp passes/typeinferencepass.cpp)
 set(CODEGEN_SOURCES codegen/codegen.cpp)
 
 

@@ -27,7 +27,6 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Transforms/Scalar.h"
-// #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Support/raw_ostream.h"

@@ -543,7 +543,6 @@ namespace codegen
 
         llvm::BasicBlock::Create(mContext, "entry", llvmFunc, 0);
 
-        //for (size_t i = 0; i < function->argCount(); ++i)
         size_t i = 0;
         auto it = llvmFunc->arg_begin();
         for ( ; it != llvmFunc->arg_end(); ++it, ++i)
@@ -1662,8 +1661,6 @@ namespace codegen
 
         mFpm = new llvm::legacy::FunctionPassManager(mModule);
 
-        // Provide basic AliasAnalysis support for GVN.
-        //mFpm->add(llvm::createBasicAliasAnalysisPass());
         // Promote allocas to registers.
         mFpm->add(llvm::createPromoteMemoryToRegisterPass());
         // Do simple "peephole" optimizations and bit-twiddling optzns.
