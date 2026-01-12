@@ -20,40 +20,6 @@
 using namespace std;
 using namespace ast;
 
-// Runtime functions built into the compiler for JIT execution
-extern "C" {
-    void silver_print_string(const char* s) {
-        printf("%s\n", s);
-    }
-    void silver_print_int(int n) {
-        printf("%d\n", n);
-    }
-    void silver_print_float(double f) {
-        printf("%f\n", f);
-    }
-    int silver_strcmp(const char* a, const char* b) {
-        return strcmp(a, b) == 0 ? 1 : 0;
-    }
-    // UTF-8 string length (count codepoints, not bytes)
-    int silver_strlen_utf8(const char* s) {
-        if (!s) return 0;
-        int count = 0;
-        while (*s) {
-            // In UTF-8, continuation bytes start with 10xxxxxx (0x80-0xBF)
-            if ((*s & 0xC0) != 0x80) {
-                count++;
-            }
-            s++;
-        }
-        return count;
-    }
-    // Get byte length of string
-    int silver_string_bytes(const char* s) {
-        if (!s) return 0;
-        return (int)strlen(s);
-    }
-}
-
 // TODO: type inference
 // TODO: The call to printf causes a segfault, see what you're doing wrong
 
@@ -1728,64 +1694,6 @@ namespace codegen
             llvm::raw_os_ostream ls(output);
             llvm::WriteBitcodeToFile(*mModule, ls);
         }
-    }
-
-    int CodeGen::runJit()
-    {
-        if (mMain == nullptr)
-        {
-            cout << "No main() found." << endl;
-            return -1;
-        }
-
-        // Initialize native target for JIT
-        llvm::InitializeNativeTarget();
-        llvm::InitializeNativeTargetAsmPrinter();
-        llvm::InitializeNativeTargetAsmParser();
-
-        // Register built-in runtime functions with LLVM
-        llvm::sys::DynamicLibrary::AddSymbol("silver_print_string", (void*)silver_print_string);
-        llvm::sys::DynamicLibrary::AddSymbol("silver_print_int", (void*)silver_print_int);
-        llvm::sys::DynamicLibrary::AddSymbol("silver_print_float", (void*)silver_print_float);
-        llvm::sys::DynamicLibrary::AddSymbol("silver_strcmp", (void*)silver_strcmp);
-        llvm::sys::DynamicLibrary::AddSymbol("silver_strlen_utf8", (void*)silver_strlen_utf8);
-        llvm::sys::DynamicLibrary::AddSymbol("silver_string_bytes", (void*)silver_string_bytes);
-
-        std::string errStr;
-        llvm::ExecutionEngine *EE = llvm::EngineBuilder(unique_ptr<llvm::Module>(mModule))
-            .setErrorStr(&errStr)
-            .setEngineKind(llvm::EngineKind::JIT)
-            .create();
-
-        if (!EE) {
-            cerr << "Failed to create ExecutionEngine: " << errStr << endl;
-            return -1;
-        }
-
-        mModule = nullptr; // now owned by unique_ptr above;
-
-        cout << "calling main()" << endl;
-        // Call the main function with no arguments:
-        vector<llvm::GenericValue> noargs;
-        llvm::GenericValue gv = EE->runFunction(mMain, noargs);
-
-        // Import result of execution:
-        int result = -1;
-        if (mMain->getReturnType() == llvm::Type::getInt32Ty(mContext))
-        {
-            result = (int)gv.IntVal.getSExtValue();
-        }
-        else
-        {
-            reportFatalError("unknown main return type");
-        }
-
-        cout << "Result: " << result << endl;
-
-        delete EE;
-        llvm::llvm_shutdown();
-
-        return result;
     }
 
     bool CodeGen::compileToExecutable(const std::string& outputPath)

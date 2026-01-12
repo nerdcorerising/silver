@@ -20,18 +20,14 @@ struct ProgramOpts
 {
 public:
     inline ProgramOpts() :
-        runJit(false),
         genByteCode(false),
-        compile(false),
         verbose(false),
         optimize(false)
     {
         buildType = BuildType::Debug;
     }
 
-    bool runJit;
     bool genByteCode;
-    bool compile;
     bool verbose;
     bool optimize;
     string outputName;
@@ -58,11 +54,7 @@ Opts getOpts(int argc, char **argv)
             transform(realArg.begin(), realArg.end(), realArg.begin(),
                 [](unsigned char c) { return static_cast<char>(::tolower(c)); });
 
-            if (realArg == "jit")
-            {
-                opt.runJit = true;
-            }
-            else if (realArg == "bytecode")
+            if (realArg == "bytecode")
             {
                 opt.genByteCode = true;
             }
@@ -73,10 +65,6 @@ Opts getOpts(int argc, char **argv)
             else if (realArg == "release")
             {
                 opt.buildType = BuildType::Release;
-            }
-            else if (realArg == "compile" || realArg == "c")
-            {
-                opt.compile = true;
             }
             else if (realArg.substr(0, 2) == "o:")
             {
@@ -91,12 +79,6 @@ Opts getOpts(int argc, char **argv)
                 opt.optimize = true;
             }
         }
-    }
-
-    // Default to compile if neither jit nor compile specified
-    if (!opt.runJit && !opt.compile)
-    {
-        opt.compile = true;
     }
 
     return opt;
@@ -158,35 +140,27 @@ int main(int argc, char **argv)
         gen.setOptimize(opt.optimize);
         gen.generate();
 
-        if (opt.runJit)
+        // Determine output name
+        string outputName = opt.outputName;
+        if (outputName.empty())
         {
-            cout << "running as JIT" << endl;
-            result = gen.runJit();
+            // Use input filename without extension
+            outputName = file;
+            size_t dotPos = outputName.rfind('.');
+            if (dotPos != string::npos)
+            {
+                outputName = outputName.substr(0, dotPos);
+            }
         }
-        else if (opt.compile)
-        {
-            // Determine output name
-            string outputName = opt.outputName;
-            if (outputName.empty())
-            {
-                // Use input filename without extension
-                outputName = file;
-                size_t dotPos = outputName.rfind('.');
-                if (dotPos != string::npos)
-                {
-                    outputName = outputName.substr(0, dotPos);
-                }
-            }
 
-            cout << "Compiling to executable..." << endl;
-            if (gen.compileToExecutable(outputName))
-            {
-                result = 0;
-            }
-            else
-            {
-                result = -1;
-            }
+        cout << "Compiling to executable..." << endl;
+        if (gen.compileToExecutable(outputName))
+        {
+            result = 0;
+        }
+        else
+        {
+            result = -1;
         }
 
         gen.freeResources();

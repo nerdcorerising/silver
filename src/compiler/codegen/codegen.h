@@ -19,8 +19,6 @@
 #pragma warning(disable:4702)   // unreachable code
 #include "llvm/Analysis/Passes.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/ExecutionEngine/ExecutionEngine.h"
-//#include "llvm/ExecutionEngine/JIT.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"
@@ -33,10 +31,7 @@
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/ExecutionEngine/GenericValue.h"
-#include "llvm/ExecutionEngine/Interpreter.h"
 #include "llvm/Support/ManagedStatic.h"
-#include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/TargetParser/Host.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -129,7 +124,6 @@ namespace codegen
 
         void setOptimize(bool optimize) { mOptimize = optimize; }
         void generate();
-        int runJit();
         bool compileToExecutable(const std::string& outputPath);
         void freeResources();
     };
