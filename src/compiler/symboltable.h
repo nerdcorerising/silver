@@ -73,6 +73,11 @@ public:
         return tryGet(name, v);
     }
 
+    bool containsInCurrentScope(key name)
+    {
+        return mCurrent.find(name) != mCurrent.end();
+    }
+
     void enterContext()
     {
         mStack.push_back(mCurrent);

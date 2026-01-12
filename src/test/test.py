@@ -5,7 +5,7 @@ import subprocess
 import glob
 
 def run_single_test(silver_exe, test_path, exe_ext, optimize, ret_code):
-    """Run a single test with or without optimization. Returns (passed, error_msg)"""
+    """Run a single test with or without optimization. Returns (passed, error_msg, output)"""
     test_name = os.path.splitext(test_path)[0]
     test_exe = test_name + exe_ext
     mode = "optimized" if optimize else "unoptimized"
@@ -18,23 +18,25 @@ def run_single_test(silver_exe, test_path, exe_ext, optimize, ret_code):
     # Step 1: Compile the .sl file to an executable
     compile_result = subprocess.run(
         compile_cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        capture_output=True,
+        text=True
     )
+    compile_output = compile_result.stdout + compile_result.stderr
 
     if compile_result.returncode != 0:
-        return (False, f"compilation failed ({mode}) with code {compile_result.returncode}")
+        return (False, f"compilation failed ({mode}) with code {compile_result.returncode}", compile_output)
 
     # Check if executable was created
     if not os.path.exists(test_exe):
-        return (False, f"compiled executable {test_exe} not found ({mode})")
+        return (False, f"compiled executable {test_exe} not found ({mode})", compile_output)
 
     # Step 2: Run the compiled executable
     run_result = subprocess.run(
         [test_exe],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        capture_output=True,
+        text=True
     )
+    run_output = run_result.stdout + run_result.stderr
 
     # Clean up the compiled executable
     try:
@@ -50,9 +52,9 @@ def run_single_test(silver_exe, test_path, exe_ext, optimize, ret_code):
         pass
 
     if run_result.returncode != ret_code:
-        return (False, f"expected code {ret_code} but got {run_result.returncode} ({mode})")
+        return (False, f"expected code {ret_code} but got {run_result.returncode} ({mode})", compile_output + run_output)
 
-    return (True, None)
+    return (True, None, None)
 
 def get_expected_error(test_path):
     """Extract expected error message from first line comment in test file."""
@@ -63,7 +65,7 @@ def get_expected_error(test_path):
     return None
 
 def run_error_test(silver_exe, test_path, optimize):
-    """Run a test that expects compilation to fail. Returns (passed, error_msg)"""
+    """Run a test that expects compilation to fail. Returns (passed, error_msg, output)"""
     mode = "optimized" if optimize else "unoptimized"
 
     # Build compile command
@@ -77,6 +79,7 @@ def run_error_test(silver_exe, test_path, optimize):
         capture_output=True,
         text=True
     )
+    compile_output = compile_result.stdout + compile_result.stderr
 
     if compile_result.returncode == 0:
         # Compilation succeeded when it should have failed
@@ -89,16 +92,15 @@ def run_error_test(silver_exe, test_path, optimize):
                     os.remove(f)
             except:
                 pass
-        return (False, f"compilation should have failed but succeeded ({mode})")
+        return (False, f"compilation should have failed but succeeded ({mode})", compile_output)
 
     # Check for expected error message if specified
     expected_error = get_expected_error(test_path)
     if expected_error:
-        output = compile_result.stdout + compile_result.stderr
-        if expected_error not in output:
-            return (False, f"expected error '{expected_error}' not found in output ({mode})")
+        if expected_error not in compile_output:
+            return (False, f"expected error '{expected_error}' not found in output ({mode})", compile_output)
 
-    return (True, None)
+    return (True, None, None)
 
 def run_tests():
     # Determine the correct executable name based on platform
@@ -130,17 +132,21 @@ def run_tests():
         test_passed = True
 
         # Run unoptimized
-        success, error = run_single_test(silver_exe, test_path, exe_ext, False, ret_code)
+        success, error, output = run_single_test(silver_exe, test_path, exe_ext, False, ret_code)
         if not success:
             print(f"    {test_path} failed")
             print(f"        Reason: {error}")
+            if output:
+                print(f"        Output: {output.strip()}")
             test_passed = False
 
         # Run optimized
-        success, error = run_single_test(silver_exe, test_path, exe_ext, True, ret_code)
+        success, error, output = run_single_test(silver_exe, test_path, exe_ext, True, ret_code)
         if not success:
             print(f"    {test_path} failed")
             print(f"        Reason: {error}")
+            if output:
+                print(f"        Output: {output.strip()}")
             test_passed = False
 
         if test_passed:
@@ -153,17 +159,21 @@ def run_tests():
         test_passed = True
 
         # Run unoptimized
-        success, error = run_error_test(silver_exe, test_path, False)
+        success, error, output = run_error_test(silver_exe, test_path, False)
         if not success:
             print(f"    {test_path} failed")
             print(f"        Reason: {error}")
+            if output:
+                print(f"        Output: {output.strip()}")
             test_passed = False
 
         # Run optimized
-        success, error = run_error_test(silver_exe, test_path, True)
+        success, error, output = run_error_test(silver_exe, test_path, True)
         if not success:
             print(f"    {test_path} failed")
             print(f"        Reason: {error}")
+            if output:
+                print(f"        Output: {output.strip()}")
             test_passed = False
 
         if test_passed:

@@ -794,6 +794,11 @@ namespace parse
                 CONSISTENCY_CHECK(false, "Unhandled keyword in parser.");
             }
         }
+        else if (curr.type() == TokenType::LeftBrace)
+        {
+            // Standalone block
+            return parseBlock();
+        }
         else
         {
             shared_ptr<Expression> statement = parseStatement();

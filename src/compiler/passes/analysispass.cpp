@@ -79,11 +79,42 @@ namespace analysis
 
     void AnalysisPassManager::defineFunctions(shared_ptr<Assembly> assembly, SymbolTable<string, string> &symbols)
     {
+        // Register built-in functions and their parameter types
+        symbols.put("strlen_utf8()", "int");
+        symbols.put("funcargs:strlen_utf8", "string");
+        symbols.put("string_bytes()", "int");
+        symbols.put("funcargs:string_bytes", "string");
+        symbols.put("print()", "void");
+        symbols.put("funcargs:print", "string");
+        symbols.put("print_string()", "void");
+        symbols.put("funcargs:print_string", "string");
+        symbols.put("print_int()", "void");
+        symbols.put("funcargs:print_int", "int");
+        symbols.put("print_float()", "void");
+        symbols.put("funcargs:print_float", "float");
+        symbols.put("strcmp()", "int");
+        symbols.put("funcargs:strcmp", "string,string");
+        symbols.put("refcount()", "int");
+        // refcount accepts any reference type, so we don't register specific arg types
+
+        // Register user-defined functions
+        // Also register "funcargs:functionName" -> comma-separated parameter types
         vector<shared_ptr<Function>> functions = assembly->getFunctions();
         for (auto func = functions.begin(); func != functions.end(); ++func)
         {
             string name = (*func)->getName() + "()";
             symbols.put(name, (*func)->getReturnType());
+
+            // Store parameter types for argument validation
+            string argsKey = "funcargs:" + (*func)->getName();
+            string argTypes = "";
+            vector<shared_ptr<Argument>> args = (*func)->getArguments();
+            for (size_t i = 0; i < args.size(); ++i)
+            {
+                if (i > 0) argTypes += ",";
+                argTypes += args[i]->getType();
+            }
+            symbols.put(argsKey, argTypes);
         }
     }
 
@@ -105,11 +136,23 @@ namespace analysis
             }
 
             // Register each method as "method:ClassName.methodName()" -> returnType
+            // Also register "methodargs:ClassName.methodName" -> comma-separated parameter types
             vector<shared_ptr<Function>> methods = (*cls)->getMethods();
             for (auto method = methods.begin(); method != methods.end(); ++method)
             {
                 string methodKey = "method:" + className + "." + (*method)->getName() + "()";
                 symbols.put(methodKey, (*method)->getReturnType());
+
+                // Store parameter types for argument validation
+                string argsKey = "methodargs:" + className + "." + (*method)->getName();
+                string argTypes = "";
+                vector<shared_ptr<Argument>> args = (*method)->getArguments();
+                for (size_t i = 0; i < args.size(); ++i)
+                {
+                    if (i > 0) argTypes += ",";
+                    argTypes += args[i]->getType();
+                }
+                symbols.put(argsKey, argTypes);
             }
         }
     }
@@ -131,6 +174,7 @@ namespace analysis
         symbols.put("namespace:" + fullPath, "namespace");
 
         // Register functions with qualified names
+        // Also register their parameter types for argument validation
         vector<shared_ptr<Function>> functions = ns->getFunctions();
         for (auto func = functions.begin(); func != functions.end(); ++func)
         {
@@ -145,6 +189,17 @@ namespace analysis
             {
                 symbols.put(qualifiedName, (*func)->getReturnType());
             }
+
+            // Store parameter types for argument validation
+            string argsKey = "funcargs:" + fullPath + "." + (*func)->getName();
+            string argTypes = "";
+            vector<shared_ptr<Argument>> args = (*func)->getArguments();
+            for (size_t i = 0; i < args.size(); ++i)
+            {
+                if (i > 0) argTypes += ",";
+                argTypes += args[i]->getType();
+            }
+            symbols.put(argsKey, argTypes);
         }
 
         // Register classes with qualified names
@@ -179,18 +234,42 @@ namespace analysis
         symbols.enterContext();
 
         // Register short function names as aliases to qualified names
+        // Also register their argument types for validation
         vector<shared_ptr<Function>> functions = ns->getFunctions();
         for (auto func = functions.begin(); func != functions.end(); ++func)
         {
             string shortName = (*func)->getName() + "()";
             symbols.put(shortName, (*func)->getReturnType());
+
+            // Store short argument types for validation within namespace
+            string shortArgsKey = "funcargs:" + (*func)->getName();
+            string argTypes = "";
+            vector<shared_ptr<Argument>> args = (*func)->getArguments();
+            for (size_t i = 0; i < args.size(); ++i)
+            {
+                if (i > 0) argTypes += ",";
+                argTypes += args[i]->getType();
+            }
+            symbols.put(shortArgsKey, argTypes);
         }
 
         // Process functions in this namespace
         for (auto func = functions.begin(); func != functions.end(); ++func)
         {
+            // Enter a new context for this function with parameters defined
+            symbols.enterContext();
+
+            // Register function parameters
+            vector<shared_ptr<Argument>> args = (*func)->getArguments();
+            for (auto arg = args.begin(); arg != args.end(); ++arg)
+            {
+                symbols.put((*arg)->getName(), (*arg)->getType());
+            }
+
             shared_ptr<BlockNode> block = (*func)->getBlock();
             performPassOnBlock(block, symbols);
+
+            symbols.leaveContext();
         }
 
         // Recurse into nested namespaces
@@ -214,8 +293,20 @@ namespace analysis
         vector<shared_ptr<Function>> functions = assembly->getFunctions();
         for (auto func = functions.begin(); func != functions.end(); ++func)
         {
+            // Enter a new context for this function with parameters defined
+            symbols.enterContext();
+
+            // Register function parameters
+            vector<shared_ptr<Argument>> args = (*func)->getArguments();
+            for (auto arg = args.begin(); arg != args.end(); ++arg)
+            {
+                symbols.put((*arg)->getName(), (*arg)->getType());
+            }
+
             shared_ptr<BlockNode> block = (*func)->getBlock();
             performPassOnBlock(block, symbols);
+
+            symbols.leaveContext();
         }
 
         // Process class methods

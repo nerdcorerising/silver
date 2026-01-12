@@ -1467,6 +1467,11 @@ namespace codegen
             }
 
             llvm::AllocaInst *inst = mTable.get(var->getValue());
+            if (inst == nullptr)
+            {
+                reportFatalError("Unknown variable: " + var->getValue(), expression);
+                return nullptr;
+            }
 
             return mBuilder.CreateLoad(inst->getAllocatedType(), inst);
         }
@@ -1567,6 +1572,24 @@ namespace codegen
             shared_ptr<WhileNode> whileNode = dynamic_pointer_cast<WhileNode>(expression);
             generateWhile(whileNode);
             // TODO: should refactor so this doesn't get called
+            return nullptr;
+        }
+        break;
+        case ExpressionType::Block:
+        {
+            // Standalone block - generate its contents in a new scope
+            shared_ptr<BlockNode> blockNode = dynamic_pointer_cast<BlockNode>(expression);
+            mTable.enterContext();
+            mVariableTypes.enterContext();
+
+            vector<shared_ptr<Expression>> &expressions = blockNode->getExpressions();
+            for (auto it = expressions.begin(); it != expressions.end(); ++it)
+            {
+                generateExpression(*it);
+            }
+
+            mVariableTypes.leaveContext();
+            mTable.leaveContext();
             return nullptr;
         }
         break;

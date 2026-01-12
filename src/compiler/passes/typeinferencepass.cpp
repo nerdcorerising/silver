@@ -9,6 +9,20 @@ using namespace ast;
 
 namespace analysis
 {
+    // Helper function to split a comma-separated string of types
+    static vector<string> splitArgTypes(const string& argTypes)
+    {
+        vector<string> result;
+        if (argTypes.empty()) return result;
+
+        stringstream ss(argTypes);
+        string item;
+        while (getline(ss, item, ','))
+        {
+            result.push_back(item);
+        }
+        return result;
+    }
     string TypeInferencePass::getTypeForExpression(shared_ptr<Expression> expression, SymbolTable<string, string> &symbols)
     {
         switch (expression->getExpressionType())
@@ -74,7 +88,17 @@ namespace analysis
         case ExpressionType::Identifier:
         {
             shared_ptr<IdentifierNode> identifier = dynamic_pointer_cast<IdentifierNode>(expression);
-            string type = symbols.get(identifier->getValue());
+            string name = identifier->getValue();
+            string type = symbols.get(name);
+            if (type.empty())
+            {
+                // Check if it's a namespace (used in namespace.func() calls)
+                string nsKey = "namespace:" + name;
+                if (symbols.get(nsKey).empty())
+                {
+                    OPTIMIZATION_ERROR_AT(expression, "Unknown variable: " + name);
+                }
+            }
             return type;
         }
         break;
@@ -88,6 +112,42 @@ namespace analysis
             shared_ptr<FunctionCallNode> call = dynamic_pointer_cast<FunctionCallNode>(expression);
             string funcName = call->getName() + "()";
             string type = symbols.get(funcName);
+
+            if (type.empty())
+            {
+                OPTIMIZATION_ERROR_AT(expression, "Unknown function: " + call->getName());
+            }
+
+            // Validate argument count and types (only if arg types are registered)
+            string argsKey = "funcargs:" + call->getName();
+            if (symbols.contains(argsKey))
+            {
+                string expectedArgsStr = symbols.get(argsKey);
+                vector<string> expectedArgs = splitArgTypes(expectedArgsStr);
+                vector<shared_ptr<Expression>> actualArgs = call->getArgs();
+
+                if (actualArgs.size() != expectedArgs.size())
+                {
+                    stringstream error;
+                    error << "Function " << call->getName() << " expects " << expectedArgs.size()
+                          << " argument(s) but got " << actualArgs.size();
+                    OPTIMIZATION_ERROR_AT(expression, error.str());
+                }
+
+                // Validate each argument type
+                for (size_t i = 0; i < actualArgs.size() && i < expectedArgs.size(); ++i)
+                {
+                    string actualType = getTypeForExpression(actualArgs[i], symbols);
+                    if (actualType != expectedArgs[i])
+                    {
+                        stringstream error;
+                        error << "Argument " << (i + 1) << " of function " << call->getName()
+                              << " expects type " << expectedArgs[i] << " but got " << actualType;
+                        OPTIMIZATION_ERROR_AT(expression, error.str());
+                    }
+                }
+            }
+
             return type;
         }
         break;
@@ -179,6 +239,37 @@ namespace analysis
                             OPTIMIZATION_ERROR_AT(expression, "Unknown function: " + objIdent->getValue() + "." + call->getMethodName());
                         }
                     }
+
+                    // Validate argument count and types for namespace function (only if registered)
+                    string argsKey = "funcargs:" + objIdent->getValue() + "." + call->getMethodName();
+                    if (symbols.contains(argsKey))
+                    {
+                        string expectedArgsStr = symbols.get(argsKey);
+                        vector<string> expectedArgs = splitArgTypes(expectedArgsStr);
+                        vector<shared_ptr<Expression>> actualArgs = call->getArgs();
+
+                        if (actualArgs.size() != expectedArgs.size())
+                        {
+                            stringstream error;
+                            error << "Function " << objIdent->getValue() << "." << call->getMethodName()
+                                  << " expects " << expectedArgs.size() << " argument(s) but got " << actualArgs.size();
+                            OPTIMIZATION_ERROR_AT(expression, error.str());
+                        }
+
+                        // Validate each argument type
+                        for (size_t i = 0; i < actualArgs.size() && i < expectedArgs.size(); ++i)
+                        {
+                            string actualType = getTypeForExpression(actualArgs[i], symbols);
+                            if (actualType != expectedArgs[i])
+                            {
+                                stringstream error;
+                                error << "Argument " << (i + 1) << " of function " << objIdent->getValue() << "." << call->getMethodName()
+                                      << " expects type " << expectedArgs[i] << " but got " << actualType;
+                                OPTIMIZATION_ERROR_AT(expression, error.str());
+                            }
+                        }
+                    }
+
                     return type;
                 }
             }
@@ -190,6 +281,37 @@ namespace analysis
             {
                 OPTIMIZATION_ERROR_AT(expression, "Unknown method: " + call->getMethodName() + " on type " + objectType);
             }
+
+            // Validate argument count and types (only if registered)
+            string argsKey = "methodargs:" + objectType + "." + call->getMethodName();
+            if (symbols.contains(argsKey))
+            {
+                string expectedArgsStr = symbols.get(argsKey);
+                vector<string> expectedArgs = splitArgTypes(expectedArgsStr);
+                vector<shared_ptr<Expression>> actualArgs = call->getArgs();
+
+                if (actualArgs.size() != expectedArgs.size())
+                {
+                    stringstream error;
+                    error << "Method " << call->getMethodName() << " expects " << expectedArgs.size()
+                          << " argument(s) but got " << actualArgs.size();
+                    OPTIMIZATION_ERROR_AT(expression, error.str());
+                }
+
+                // Validate each argument type
+                for (size_t i = 0; i < actualArgs.size() && i < expectedArgs.size(); ++i)
+                {
+                    string actualType = getTypeForExpression(actualArgs[i], symbols);
+                    if (actualType != expectedArgs[i])
+                    {
+                        stringstream error;
+                        error << "Argument " << (i + 1) << " of method " << call->getMethodName()
+                              << " expects type " << expectedArgs[i] << " but got " << actualType;
+                        OPTIMIZATION_ERROR_AT(expression, error.str());
+                    }
+                }
+            }
+
             return type;
         }
         break;
@@ -219,7 +341,7 @@ namespace analysis
             {
                 shared_ptr<DeclarationNode> decl = dynamic_pointer_cast<DeclarationNode>(current);
 
-                if (symbols.contains(decl->getName()))
+                if (symbols.containsInCurrentScope(decl->getName()))
                 {
                     OPTIMIZATION_ERROR_AT(current, "variable " + decl->getName() + " already declared");
                 }
@@ -244,6 +366,18 @@ namespace analysis
                 }
                 else
                 {
+                    // Explicit type provided - check if initializer matches
+                    shared_ptr<Expression> initExpr = decl->getExpression();
+                    if (initExpr != nullptr)
+                    {
+                        string initType = getTypeForExpression(initExpr, symbols);
+                        if (initType != decl->getTypeName())
+                        {
+                            stringstream error;
+                            error << "Types " << decl->getTypeName() << " and " << initType << " do not match";
+                            OPTIMIZATION_ERROR_AT(current, error.str());
+                        }
+                    }
                     symbols.put(decl->getName(), decl->getTypeName());
                 }
             }
@@ -273,6 +407,23 @@ namespace analysis
                         OPTIMIZATION_ERROR_AT(current, error.str());
                     }
                 }
+            }
+            break;
+            case ExpressionType::Return:
+            {
+                // Type-check the return expression to catch undefined variables
+                shared_ptr<ReturnNode> ret = dynamic_pointer_cast<ReturnNode>(current);
+                if (ret->getExpression() != nullptr)
+                {
+                    getTypeForExpression(ret->getExpression(), symbols);
+                }
+            }
+            break;
+            case ExpressionType::FunctionCall:
+            case ExpressionType::MethodCall:
+            {
+                // Type-check standalone function/method calls to validate arguments
+                getTypeForExpression(current, symbols);
             }
             break;
             default:
