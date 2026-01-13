@@ -249,7 +249,7 @@ namespace codegen
         {
             return llvm::PointerType::get(mContext, 0);
         }
-        else if (str == "void")
+        else if (str == "void" || str.empty())
         {
             return llvm::Type::getVoidTy(mContext);
         }
@@ -456,7 +456,7 @@ namespace codegen
         llvm::BasicBlock *lastBlock = &llvmFunc->back();
         if (lastBlock->getTerminator() == nullptr)
         {
-            if (function->getReturnType() == "void")
+            if (function->getReturnType() == "void" || function->getReturnType().empty())
             {
                 mBuilder.SetInsertPoint(lastBlock);
                 mBuilder.CreateRetVoid();
@@ -563,7 +563,7 @@ namespace codegen
         llvm::BasicBlock *lastBlock = &llvmFunc->back();
         if (lastBlock->getTerminator() == nullptr)
         {
-            if (function->getReturnType() == "void")
+            if (function->getReturnType() == "void" || function->getReturnType().empty())
             {
                 mBuilder.SetInsertPoint(lastBlock);
                 mBuilder.CreateRetVoid();
@@ -1191,6 +1191,21 @@ namespace codegen
             for (auto expr = expressions.begin(); expr != expressions.end(); ++expr)
             {
                 generateExpression(*expr);
+            }
+
+            // For void methods without explicit return, add implicit ret void
+            llvm::BasicBlock *lastBlock = &llvmFunc->back();
+            if (lastBlock->getTerminator() == nullptr)
+            {
+                if ((*method)->getReturnType() == "void" || (*method)->getReturnType().empty())
+                {
+                    mBuilder.SetInsertPoint(lastBlock);
+                    mBuilder.CreateRetVoid();
+                }
+                else
+                {
+                    reportFatalError("Non-void method " + mangledName + " missing return statement");
+                }
             }
 
             // Clean up

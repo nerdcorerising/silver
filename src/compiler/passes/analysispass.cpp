@@ -271,6 +271,9 @@ namespace analysis
             // Enter a new context for this function with parameters defined
             symbols.enterContext();
 
+            // Register expected return type for validation
+            symbols.put("__return_type__", (*func)->getReturnType());
+
             // Register function parameters
             vector<shared_ptr<Argument>> args = (*func)->getArguments();
             for (auto arg = args.begin(); arg != args.end(); ++arg)
@@ -308,6 +311,9 @@ namespace analysis
             // Enter a new context for this function with parameters defined
             symbols.enterContext();
 
+            // Register expected return type for validation
+            symbols.put("__return_type__", (*func)->getReturnType());
+
             // Register function parameters
             vector<shared_ptr<Argument>> args = (*func)->getArguments();
             for (auto arg = args.begin(); arg != args.end(); ++arg)
@@ -332,6 +338,9 @@ namespace analysis
                 // Enter a new context for this method with 'this' and parameters defined
                 symbols.enterContext();
                 symbols.put("this", className);
+
+                // Register expected return type for validation
+                symbols.put("__return_type__", (*method)->getReturnType());
 
                 // Register method parameters
                 vector<shared_ptr<Argument>> args = (*method)->getArguments();

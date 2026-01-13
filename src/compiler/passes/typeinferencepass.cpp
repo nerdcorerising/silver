@@ -111,12 +111,13 @@ namespace analysis
         {
             shared_ptr<FunctionCallNode> call = dynamic_pointer_cast<FunctionCallNode>(expression);
             string funcName = call->getName() + "()";
-            string type = symbols.get(funcName);
 
-            if (type.empty())
+            if (!symbols.contains(funcName))
             {
                 OPTIMIZATION_ERROR_AT(expression, "Unknown function: " + call->getName());
             }
+
+            string type = symbols.get(funcName);
 
             // Validate argument count and types (only if arg types are registered)
             string argsKey = "funcargs:" + call->getName();
@@ -292,11 +293,11 @@ namespace analysis
 
             // It's a method call on an object, look up "method:ClassName.methodName()"
             string methodKey = "method:" + objectType + "." + call->getMethodName() + "()";
-            string type = symbols.get(methodKey);
-            if (type.empty())
+            if (!symbols.contains(methodKey))
             {
                 OPTIMIZATION_ERROR_AT(expression, "Unknown method: " + call->getMethodName() + " on type " + objectType);
             }
+            string type = symbols.get(methodKey);
 
             // Check method visibility
             string visKey = "methodvis:" + objectType + "." + call->getMethodName();
@@ -443,11 +444,31 @@ namespace analysis
             break;
             case ExpressionType::Return:
             {
-                // Type-check the return expression to catch undefined variables
+                // Type-check the return expression and validate against expected return type
                 shared_ptr<ReturnNode> ret = dynamic_pointer_cast<ReturnNode>(current);
+                string expectedReturnType = symbols.get("__return_type__");
+
                 if (ret->getExpression() != nullptr)
                 {
-                    getTypeForExpression(ret->getExpression(), symbols);
+                    string actualType = getTypeForExpression(ret->getExpression(), symbols);
+
+                    // Check return type matches (empty expectedReturnType means void)
+                    if (!expectedReturnType.empty() && actualType != expectedReturnType)
+                    {
+                        stringstream error;
+                        error << "Return type mismatch: expected " << expectedReturnType << " but got " << actualType;
+                        OPTIMIZATION_ERROR_AT(current, error.str());
+                    }
+                }
+                else
+                {
+                    // Return with no expression - only valid for void functions
+                    if (!expectedReturnType.empty())
+                    {
+                        stringstream error;
+                        error << "Return type mismatch: expected " << expectedReturnType << " but got void";
+                        OPTIMIZATION_ERROR_AT(current, error.str());
+                    }
                 }
             }
             break;
