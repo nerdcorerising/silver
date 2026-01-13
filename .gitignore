@@ -38,3 +38,5 @@ obj/
 
 # vcpkg
 vcpkg_installed/
+
+.claude/

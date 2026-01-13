@@ -12,4 +12,5 @@ set(SOURCES main.cpp ${PARSER_SOURCES} ${AST_SOURCES} ${ANALYSIS_SOURCES} ${CODE
 
 add_executable(silver ${SOURCES})
 
+target_compile_definitions(silver PRIVATE ${LLVM_COMPILE_DEFINITIONS})
 target_link_libraries(silver ${DEPENDENCIES})
