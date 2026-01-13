@@ -22,7 +22,8 @@ public:
     inline ProgramOpts() :
         genByteCode(false),
         verbose(false),
-        optimize(false)
+        optimize(false),
+        debugSymbols(false)
     {
         buildType = BuildType::Debug;
     }
@@ -30,6 +31,7 @@ public:
     bool genByteCode;
     bool verbose;
     bool optimize;
+    bool debugSymbols;
     string outputName;
     BuildType buildType;
 };
@@ -77,6 +79,10 @@ Opts getOpts(int argc, char **argv)
             else if (realArg == "optimize" || realArg == "o")
             {
                 opt.optimize = true;
+            }
+            else if (realArg == "g")
+            {
+                opt.debugSymbols = true;
             }
         }
     }
@@ -136,8 +142,9 @@ int main(int argc, char **argv)
             out = "sampleoutput.bc";
         }
 
-        CodeGen gen(node, out);
+        CodeGen gen(node, file, out);
         gen.setOptimize(opt.optimize);
+        gen.setDebugSymbols(opt.debugSymbols);
         gen.generate();
 
         // Determine output name

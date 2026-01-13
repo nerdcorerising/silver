@@ -5,7 +5,9 @@
 #include <string>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 #include "logger.h"
+#include "llvm/BinaryFormat/Dwarf.h"
 
 #pragma warning(push)
 #pragma warning(disable:4244)
@@ -25,7 +27,7 @@ using namespace ast;
 
 namespace codegen
 {
-    CodeGen::CodeGen(shared_ptr<Assembly> tree, string outFile) :
+    CodeGen::CodeGen(shared_ptr<Assembly> tree, string sourceFile, string outFile) :
         mOutFile(outFile),
         mTree(tree),
         mTable(),
@@ -33,6 +35,11 @@ namespace codegen
         mCurrentClass(),
         mThisPtr(nullptr),
         mOptimize(false),
+        mDebugSymbols(false),
+        mSourceFile(sourceFile),
+        mDIBuilder(nullptr),
+        mDICompileUnit(nullptr),
+        mDIFile(nullptr),
         mContext(),
         mModule(nullptr),
         mMain(nullptr),
@@ -129,6 +136,20 @@ namespace codegen
             fprintf(stderr, "Error during codegen phase: %s\n", message.c_str());
         }
         throw message;
+    }
+
+    void CodeGen::setDebugLocation(shared_ptr<ast::Expression> expr)
+    {
+        if (mDebugSymbols && mDIBuilder && expr && expr->line() > 0)
+        {
+            llvm::BasicBlock* bb = mBuilder.GetInsertBlock();
+            if (bb && bb->getParent() && bb->getParent()->getSubprogram())
+            {
+                mBuilder.SetCurrentDebugLocation(
+                    llvm::DILocation::get(mContext, expr->line(), expr->column(),
+                                          bb->getParent()->getSubprogram()));
+            }
+        }
     }
 
     void CodeGen::putFunc(string name, llvm::Function *func)
@@ -436,6 +457,28 @@ namespace codegen
 
         llvm::BasicBlock::Create(mContext, "entry", llvmFunc, 0);
 
+        // Create debug info for this function
+        if (mDebugSymbols && mDIBuilder)
+        {
+            int lineNumber = function->getBlock() ? function->getBlock()->line() : 1;
+            if (lineNumber <= 0) lineNumber = 1;
+
+            llvm::DISubroutineType* funcType = mDIBuilder->createSubroutineType(
+                mDIBuilder->getOrCreateTypeArray({}));
+            llvm::DISubprogram* SP = mDIBuilder->createFunction(
+                mDIFile,                          // Scope
+                function->getName(),              // Name
+                mangledName,                      // Linkage name
+                mDIFile,                          // File
+                lineNumber,                       // Line
+                funcType,                         // Type
+                lineNumber,                       // Scope line
+                llvm::DINode::FlagPrototyped,
+                llvm::DISubprogram::SPFlagDefinition
+            );
+            llvmFunc->setSubprogram(SP);
+        }
+
         size_t i = 0;
         auto it = llvmFunc->arg_begin();
         for ( ; it != llvmFunc->arg_end(); ++it, ++i)
@@ -542,6 +585,28 @@ namespace codegen
         }
 
         llvm::BasicBlock::Create(mContext, "entry", llvmFunc, 0);
+
+        // Create debug info for this function
+        if (mDebugSymbols && mDIBuilder)
+        {
+            int lineNumber = function->getBlock() ? function->getBlock()->line() : 1;
+            if (lineNumber <= 0) lineNumber = 1;
+
+            llvm::DISubroutineType* funcType = mDIBuilder->createSubroutineType(
+                mDIBuilder->getOrCreateTypeArray({}));
+            llvm::DISubprogram* SP = mDIBuilder->createFunction(
+                mDIFile,                          // Scope
+                function->getName(),              // Name
+                function->getName(),              // Linkage name
+                mDIFile,                          // File
+                lineNumber,                       // Line
+                funcType,                         // Type
+                lineNumber,                       // Scope line
+                llvm::DINode::FlagPrototyped,
+                llvm::DISubprogram::SPFlagDefinition
+            );
+            llvmFunc->setSubprogram(SP);
+        }
 
         size_t i = 0;
         auto it = llvmFunc->arg_begin();
@@ -1443,6 +1508,9 @@ namespace codegen
 
     llvm::Value *CodeGen::generateExpression(shared_ptr<Expression> expression)
     {
+        // Set debug location for this expression
+        setDebugLocation(expression);
+
         switch (expression->getExpressionType())
         {
         case ExpressionType::IntegerLiteral:
@@ -1699,6 +1767,42 @@ namespace codegen
 
         mFpm = new llvm::legacy::FunctionPassManager(mModule);
 
+        // Initialize debug info if enabled
+        if (mDebugSymbols)
+        {
+            // Add module flags required for debug info
+            mModule->addModuleFlag(llvm::Module::Warning, "Debug Info Version",
+                                   llvm::DEBUG_METADATA_VERSION);
+            mModule->addModuleFlag(llvm::Module::Warning, "CodeView", 1);
+
+            mDIBuilder = new llvm::DIBuilder(*mModule);
+
+            // Extract filename and directory from source path
+            // Use absolute path for better debugger support
+            std::string absPath = mSourceFile;
+            char fullPath[1024];
+            if (_fullpath(fullPath, mSourceFile.c_str(), sizeof(fullPath)))
+            {
+                absPath = fullPath;
+            }
+
+            size_t lastSlash = absPath.find_last_of("/\\");
+            std::string filename = (lastSlash != std::string::npos) ? absPath.substr(lastSlash + 1) : absPath;
+            std::string directory = (lastSlash != std::string::npos) ? absPath.substr(0, lastSlash) : ".";
+
+            mDIFile = mDIBuilder->createFile(filename, directory);
+            mDICompileUnit = mDIBuilder->createCompileUnit(
+                llvm::dwarf::DW_LANG_C,      // Use C language ID (closest match)
+                mDIFile,
+                "Silver Compiler",            // Producer
+                mOptimize,                    // isOptimized
+                "",                           // Flags
+                0,                            // Runtime version
+                llvm::StringRef(),            // Split name
+                llvm::DICompileUnit::FullDebug  // Emission kind
+            );
+        }
+
         // Promote allocas to registers.
         mFpm->add(llvm::createPromoteMemoryToRegisterPass());
         // Do simple "peephole" optimizations and bit-twiddling optzns.
@@ -1720,6 +1824,12 @@ namespace codegen
             mModule->print(llvm::errs(), nullptr);
             LOG("Codegen: Module printed, verifying\n");
         }
+        // Finalize debug info before verification
+        if (mDebugSymbols && mDIBuilder)
+        {
+            mDIBuilder->finalize();
+        }
+
         llvm::verifyModule(*mModule);
 
         filebuf fb;
@@ -1791,6 +1901,10 @@ namespace codegen
         // Link with runtime to create executable
         std::string exePath = outputPath + ".exe";
         std::string linkCmd = "link.exe /nologo /subsystem:console ";
+        if (mDebugSymbols)
+        {
+            linkCmd += "/DEBUG ";
+        }
         linkCmd += "/out:" + exePath + " ";
         linkCmd += objPath + " ";
         linkCmd += "silver_runtime.lib ";
@@ -1807,8 +1921,11 @@ namespace codegen
 
         cout << "Generated executable: " << exePath << endl;
 
-        // Clean up object file
-        remove(objPath.c_str());
+        // Clean up object file (keep it for debugging if debug symbols enabled)
+        if (!mDebugSymbols)
+        {
+            remove(objPath.c_str());
+        }
 
         delete targetMachine;
         return true;
@@ -1816,6 +1933,12 @@ namespace codegen
 
     void CodeGen::freeResources()
     {
+        if (mDIBuilder)
+        {
+            delete mDIBuilder;
+            mDIBuilder = nullptr;
+        }
+
         if (mModule)
         {
             delete mModule;

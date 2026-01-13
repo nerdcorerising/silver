@@ -36,6 +36,7 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/IR/DIBuilder.h"
 #pragma warning (pop)
 
 #include "parser/parser.h"
@@ -69,6 +70,11 @@ namespace codegen
         llvm::Value* mThisPtr;
 
         bool mOptimize;
+        bool mDebugSymbols;
+        std::string mSourceFile;
+        llvm::DIBuilder* mDIBuilder;
+        llvm::DICompileUnit* mDICompileUnit;
+        llvm::DIFile* mDIFile;
         llvm::LLVMContext mContext;
         llvm::Module *mModule;
         llvm::Function *mMain;
@@ -110,6 +116,9 @@ namespace codegen
         llvm::Value *generateBlock(std::shared_ptr<ast::BlockNode> block, llvm::Function * llvmFunc);
         llvm::Value *generateIntoBlock(llvm::BasicBlock *basicBlock, std::shared_ptr<ast::BlockNode> block);
 
+        // Debug info helpers
+        void setDebugLocation(std::shared_ptr<ast::Expression> expr);
+
         // Reference counting helpers
         bool isRefCountedType(const std::string& typeName);
         void generateRetain(llvm::Value* ptr);
@@ -119,9 +128,10 @@ namespace codegen
         void releaseAllInCurrentScope();
         void releaseAllScopes();  // For return statements - release all ref-counted vars
     public:
-        CodeGen(std::shared_ptr<ast::Assembly> tree, std::string outFile="");
+        CodeGen(std::shared_ptr<ast::Assembly> tree, std::string sourceFile, std::string outFile="");
 
         void setOptimize(bool optimize) { mOptimize = optimize; }
+        void setDebugSymbols(bool debug) { mDebugSymbols = debug; }
         void generate();
         bool compileToExecutable(const std::string& outputPath);
         void freeResources();

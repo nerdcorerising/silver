@@ -32,6 +32,7 @@ struct TestTask
 {
     std::string path;
     bool isErrorTest;
+    bool isPdbTest;
 };
 
 // Run a process and capture its output, returns exit code
@@ -80,10 +81,36 @@ std::string getExpectedError(const std::string &testPath)
     return "";
 }
 
-// Cleanup generated files (.exe, .lib, .exp)
+// Extract expected symbols from "# expect-symbols:" comment on first line
+// Returns comma-separated list of symbol names
+std::string getExpectedSymbols(const std::string &testPath)
+{
+    std::ifstream file(testPath);
+    if (!file.is_open())
+        return "";
+
+    std::string firstLine;
+    std::getline(file, firstLine);
+
+    const std::string prefix = "# expect-symbols:";
+    if (firstLine.substr(0, prefix.size()) == prefix)
+    {
+        std::string symbols = firstLine.substr(prefix.size());
+        // Trim leading/trailing whitespace
+        size_t start = symbols.find_first_not_of(" \t");
+        size_t end = symbols.find_last_not_of(" \t");
+        if (start != std::string::npos && end != std::string::npos)
+        {
+            return symbols.substr(start, end - start + 1);
+        }
+    }
+    return "";
+}
+
+// Cleanup generated files (.exe, .lib, .exp, .pdb, .obj)
 void cleanup(const std::string &basePath)
 {
-    std::vector<std::string> extensions = {".exe", ".lib", ".exp"};
+    std::vector<std::string> extensions = {".exe", ".lib", ".exp", ".pdb", ".obj"};
     for (const auto &ext : extensions)
     {
         std::string filePath = basePath + ext;
@@ -192,6 +219,68 @@ bool runSingleErrorTest(const std::string &testPath, bool optimize, std::string 
     return true;
 }
 
+// Run a PDB test (compile with -g, verify symbols in PDB)
+bool runPdbTest(const std::string &testPath, std::string &errorMsg, std::string &output)
+{
+    std::string baseName = testPath.substr(0, testPath.size() - 3); // Remove .sl
+    std::string pdbPath = baseName + ".pdb";
+
+    // Compile with debug symbols
+    std::string compileCmd = "silver.exe \"" + testPath + "\" -g 2>&1";
+    std::string compileOutput;
+    int compileResult = runProcess(compileCmd, compileOutput);
+    output = compileOutput;
+
+    if (compileResult != 0)
+    {
+        cleanup(baseName);
+        errorMsg = "compilation with -g failed with code " + std::to_string(compileResult);
+        return false;
+    }
+
+    // Check PDB was created
+    if (!fs::exists(pdbPath))
+    {
+        cleanup(baseName);
+        errorMsg = "PDB file not created: " + pdbPath;
+        return false;
+    }
+
+    // Get expected symbols
+    std::string expectedSymbols = getExpectedSymbols(testPath);
+    if (expectedSymbols.empty())
+    {
+        cleanup(baseName);
+        errorMsg = "no expected symbols specified (use # expect-symbols: comment)";
+        return false;
+    }
+
+    // Build pdb_test command with expected symbols
+    // Replace commas with spaces for command line args
+    std::string symbolArgs = expectedSymbols;
+    for (char &c : symbolArgs)
+    {
+        if (c == ',')
+            c = ' ';
+    }
+
+    std::string pdbTestCmd = "pdb_test.exe \"" + pdbPath + "\" " + symbolArgs + " 2>&1";
+    std::string pdbTestOutput;
+    int pdbTestResult = runProcess(pdbTestCmd, pdbTestOutput);
+    output += pdbTestOutput;
+
+    // Cleanup
+    cleanup(baseName);
+
+    if (pdbTestResult != 0)
+    {
+        errorMsg = "PDB verification failed: " + pdbTestOutput;
+        return false;
+    }
+
+    return true;
+}
+
 // Run a complete test (both optimized and unoptimized modes)
 TestResult runCompleteTest(const TestTask &task)
 {
@@ -199,9 +288,22 @@ TestResult runCompleteTest(const TestTask &task)
     result.path = task.path;
     result.passed = true;
 
-    // Run unoptimized
     std::string errorMsg, output;
     bool success;
+
+    // PDB tests only run once (with -g flag, no optimization modes)
+    if (task.isPdbTest)
+    {
+        success = runPdbTest(task.path, errorMsg, output);
+        if (!success)
+        {
+            result.passed = false;
+            result.failures.push_back({errorMsg, output});
+        }
+        return result;
+    }
+
+    // Run unoptimized
     if (task.isErrorTest)
     {
         success = runSingleErrorTest(task.path, false, errorMsg, output);
@@ -306,6 +408,7 @@ int main(int argc, char *argv[])
             TestTask task;
             task.path = entry.path().string();
             task.isErrorTest = task.path.find("_error.sl") != std::string::npos;
+            task.isPdbTest = task.path.find("_pdb.sl") != std::string::npos;
             tasks.push_back(task);
         }
     }
