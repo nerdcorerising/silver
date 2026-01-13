@@ -180,6 +180,22 @@ namespace analysis
             {
                 OPTIMIZATION_ERROR_AT(expression, "Unknown field: " + member->getMemberName() + " in type " + objectType);
             }
+
+            // Check field visibility
+            string visKey = "fieldvis:" + objectType + "." + member->getMemberName();
+            string visibility = symbols.get(visKey);
+            if (visibility == "private")
+            {
+                // Private fields can only be accessed from within the same class
+                string thisType = symbols.get("this");
+                if (thisType != objectType)
+                {
+                    stringstream error;
+                    error << "Cannot access private field '" << member->getMemberName() << "' of class " << objectType;
+                    OPTIMIZATION_ERROR_AT(expression, error.str());
+                }
+            }
+
             return fieldType;
         }
         break;
@@ -280,6 +296,22 @@ namespace analysis
             if (type.empty())
             {
                 OPTIMIZATION_ERROR_AT(expression, "Unknown method: " + call->getMethodName() + " on type " + objectType);
+            }
+
+            // Check method visibility
+            string visKey = "methodvis:" + objectType + "." + call->getMethodName();
+            string visibility = symbols.get(visKey);
+            if (visibility == "private")
+            {
+                // Private methods can only be called from within the same class
+                // Check if "this" is defined and its type matches objectType
+                string thisType = symbols.get("this");
+                if (thisType != objectType)
+                {
+                    stringstream error;
+                    error << "Cannot access private method '" << call->getMethodName() << "' of class " << objectType;
+                    OPTIMIZATION_ERROR_AT(expression, error.str());
+                }
             }
 
             // Validate argument count and types (only if registered)

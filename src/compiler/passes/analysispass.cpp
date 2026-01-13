@@ -128,15 +128,22 @@ namespace analysis
             symbols.put("class:" + className, className);
 
             // Register each field as "ClassName.fieldName" -> fieldType
+            // Also register "fieldvis:ClassName.fieldName" -> "public" or "private"
             vector<shared_ptr<Field>> fields = (*cls)->getFields();
             for (auto field = fields.begin(); field != fields.end(); ++field)
             {
                 string fieldKey = className + "." + (*field)->getName();
                 symbols.put(fieldKey, (*field)->getType());
+
+                // Store visibility for access control
+                string visKey = "fieldvis:" + className + "." + (*field)->getName();
+                string visibility = (*field)->getVisibility() == Visibility::Public ? "public" : "private";
+                symbols.put(visKey, visibility);
             }
 
             // Register each method as "method:ClassName.methodName()" -> returnType
             // Also register "methodargs:ClassName.methodName" -> comma-separated parameter types
+            // Also register "methodvis:ClassName.methodName" -> "public" or "private"
             vector<shared_ptr<Function>> methods = (*cls)->getMethods();
             for (auto method = methods.begin(); method != methods.end(); ++method)
             {
@@ -153,6 +160,11 @@ namespace analysis
                     argTypes += args[i]->getType();
                 }
                 symbols.put(argsKey, argTypes);
+
+                // Store visibility for access control
+                string visKey = "methodvis:" + className + "." + (*method)->getName();
+                string visibility = (*method)->getVisibility() == Visibility::Public ? "public" : "private";
+                symbols.put(visKey, visibility);
             }
         }
     }

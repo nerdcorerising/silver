@@ -216,7 +216,7 @@ namespace parse
         }
     }
 
-    shared_ptr<Function> Parser::parseFunction(bool isLocal)
+    shared_ptr<Function> Parser::parseFunction(bool isLocal, Visibility visibility)
     {
         expectCurrentTokenTypeAndText(TokenType::Keyword, "fn", "Missing function keyword");
 
@@ -243,7 +243,7 @@ namespace parse
 
         shared_ptr<BlockNode> block = parseBlock();
 
-        return shared_ptr<Function>(new Function(block, name, args, returnType, isLocal));
+        return shared_ptr<Function>(new Function(block, name, args, returnType, isLocal, visibility));
     }
 
     shared_ptr<Field> Parser::parseField()
@@ -302,11 +302,36 @@ namespace parse
 
         while (current().type() != TokenType::RightBrace)
         {
-            // Check if this is a method definition (starts with 'fn')
-            if (current().type() == TokenType::Keyword && current().text() == "fn")
+            // Check if this is a method definition
+            // Methods can be: "fn name()", "public fn name()", or "private fn name()"
+            if (current().type() == TokenType::Keyword)
             {
-                shared_ptr<Function> method = parseFunction(false);
-                methods.push_back(method);
+                if (current().text() == "fn")
+                {
+                    // Default to public visibility
+                    shared_ptr<Function> method = parseFunction(false, Visibility::Public);
+                    methods.push_back(method);
+                }
+                else if (current().text() == "public")
+                {
+                    advance();
+                    expectCurrentTokenTypeAndText(TokenType::Keyword, "fn", "Expected 'fn' after 'public'");
+                    shared_ptr<Function> method = parseFunction(false, Visibility::Public);
+                    methods.push_back(method);
+                }
+                else if (current().text() == "private")
+                {
+                    advance();
+                    expectCurrentTokenTypeAndText(TokenType::Keyword, "fn", "Expected 'fn' after 'private'");
+                    shared_ptr<Function> method = parseFunction(false, Visibility::Private);
+                    methods.push_back(method);
+                }
+                else
+                {
+                    // Not a method, must be a field
+                    shared_ptr<Field> field = parseField();
+                    fields.push_back(field);
+                }
             }
             else
             {

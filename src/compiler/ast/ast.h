@@ -136,19 +136,22 @@ namespace ast
         std::vector<std::shared_ptr<Argument>> mArgs;
         std::string mReturnType;
         bool mIsLocal;
+        Visibility mVisibility;
 
     public:
         Function(std::shared_ptr<BlockNode> block,
                  std::string name,
                  std::vector<std::shared_ptr<Argument>> arguments,
                  std::string returnType,
-                 bool isLocal = false);
+                 bool isLocal = false,
+                 Visibility visibility = Visibility::Public);
         virtual ~Function() = default;
 
         std::shared_ptr<BlockNode> getBlock();
         std::string getName() const;
         std::string getReturnType() const;
         bool isLocal() const;
+        Visibility getVisibility() const;
         size_t argCount();
         std::vector<std::shared_ptr<Argument>> getArguments();
         virtual void prettyPrint(std::ostream &out, size_t indent) override;

@@ -3,6 +3,6 @@ setlocal
 
 pushd bin\
 
-python test.py
+python test.py %*
 
 popd

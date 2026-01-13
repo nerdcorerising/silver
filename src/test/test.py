@@ -3,6 +3,8 @@ import os
 import sys
 import subprocess
 import glob
+import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def run_single_test(silver_exe, test_path, exe_ext, optimize, ret_code):
     """Run a single test with or without optimization. Returns (passed, error_msg, output)"""
@@ -102,7 +104,35 @@ def run_error_test(silver_exe, test_path, optimize):
 
     return (True, None, None)
 
-def run_tests():
+def run_complete_test(args):
+    """Run a complete test (both optimized and unoptimized). Returns (test_path, passed, failures)"""
+    silver_exe, test_path, exe_ext, is_error_test, ret_code = args
+    failures = []
+
+    if is_error_test:
+        # Run unoptimized
+        success, error, output = run_error_test(silver_exe, test_path, False)
+        if not success:
+            failures.append((error, output))
+
+        # Run optimized
+        success, error, output = run_error_test(silver_exe, test_path, True)
+        if not success:
+            failures.append((error, output))
+    else:
+        # Run unoptimized
+        success, error, output = run_single_test(silver_exe, test_path, exe_ext, False, ret_code)
+        if not success:
+            failures.append((error, output))
+
+        # Run optimized
+        success, error, output = run_single_test(silver_exe, test_path, exe_ext, True, ret_code)
+        if not success:
+            failures.append((error, output))
+
+    return (test_path, len(failures) == 0, failures)
+
+def run_tests(parallel=False, num_threads=None):
     # Determine the correct executable name based on platform
     if sys.platform == "win32":
         silver_exe = "silver.exe"
@@ -121,69 +151,64 @@ def run_tests():
     normal_tests = [t for t in all_tests if not t.endswith("_error.sl")]
     error_tests = [t for t in all_tests if t.endswith("_error.sl")]
 
-    print(f"Running silver tests (both optimized and unoptimized)...")
-
     ret_code = 50
+
+    # Build list of all test tasks
+    test_tasks = []
+    for test_path in normal_tests:
+        test_tasks.append((silver_exe, test_path, exe_ext, False, ret_code))
+    for test_path in error_tests:
+        test_tasks.append((silver_exe, test_path, exe_ext, True, ret_code))
+
+    if parallel:
+        threads = num_threads if num_threads else os.cpu_count()
+        print(f"Running silver tests in parallel ({threads} threads)...")
+    else:
+        print(f"Running silver tests (both optimized and unoptimized)...")
+
     passed = 0
     failed = 0
+    results = []
 
-    # Run normal tests (expect success with return code 50)
-    for test_path in normal_tests:
-        test_passed = True
+    if parallel:
+        # Run tests in parallel
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            futures = {executor.submit(run_complete_test, task): task for task in test_tasks}
+            for future in as_completed(futures):
+                test_path, test_passed, failures = future.result()
+                results.append((test_path, test_passed, failures))
+    else:
+        # Run tests sequentially
+        for task in test_tasks:
+            test_path, test_passed, failures = run_complete_test(task)
+            results.append((test_path, test_passed, failures))
 
-        # Run unoptimized
-        success, error, output = run_single_test(silver_exe, test_path, exe_ext, False, ret_code)
-        if not success:
-            print(f"    {test_path} failed")
-            print(f"        Reason: {error}")
-            if output:
-                print(f"        Output: {output.strip()}")
-            test_passed = False
+    # Sort results by test path for consistent output
+    results.sort(key=lambda x: x[0])
 
-        # Run optimized
-        success, error, output = run_single_test(silver_exe, test_path, exe_ext, True, ret_code)
-        if not success:
-            print(f"    {test_path} failed")
-            print(f"        Reason: {error}")
-            if output:
-                print(f"        Output: {output.strip()}")
-            test_passed = False
-
+    # Print results
+    for test_path, test_passed, failures in results:
         if test_passed:
             passed += 1
         else:
             failed += 1
-
-    # Run error tests (expect compilation to fail)
-    for test_path in error_tests:
-        test_passed = True
-
-        # Run unoptimized
-        success, error, output = run_error_test(silver_exe, test_path, False)
-        if not success:
-            print(f"    {test_path} failed")
-            print(f"        Reason: {error}")
-            if output:
-                print(f"        Output: {output.strip()}")
-            test_passed = False
-
-        # Run optimized
-        success, error, output = run_error_test(silver_exe, test_path, True)
-        if not success:
-            print(f"    {test_path} failed")
-            print(f"        Reason: {error}")
-            if output:
-                print(f"        Output: {output.strip()}")
-            test_passed = False
-
-        if test_passed:
-            passed += 1
-        else:
-            failed += 1
+            for error, output in failures:
+                print(f"    {test_path} failed")
+                print(f"        Reason: {error}")
+                if output:
+                    print(f"        Output: {output.strip()}")
 
     print(f"Results: {passed} passed, {failed} failed")
     return failed
 
 if __name__ == "__main__":
-    failed = run_tests()
+    parser = argparse.ArgumentParser(description="Run Silver compiler tests")
+    parser.add_argument("-j", "--parallel", nargs="?", const=0, type=int, metavar="N",
+                        help="Run tests in parallel. Optionally specify number of threads (default: CPU count)")
+    args = parser.parse_args()
+
+    parallel = args.parallel is not None
+    num_threads = args.parallel if args.parallel and args.parallel > 0 else None
+
+    failed = run_tests(parallel=parallel, num_threads=num_threads)
     sys.exit(0 if failed == 0 else 1)

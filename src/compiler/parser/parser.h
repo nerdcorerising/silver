@@ -23,7 +23,7 @@ namespace parse
 
         std::vector<std::shared_ptr<ast::Argument>> parseArgumentsForDeclaration();
         std::vector<std::shared_ptr<ast::Function>> parseImport();
-        std::shared_ptr<ast::Function> parseFunction(bool isLocal = false);
+        std::shared_ptr<ast::Function> parseFunction(bool isLocal = false, ast::Visibility visibility = ast::Visibility::Public);
         std::shared_ptr<ast::ClassDeclaration> parseClass();
         std::shared_ptr<ast::NamespaceDeclaration> parseNamespace();
         std::shared_ptr<ast::Field> parseField();

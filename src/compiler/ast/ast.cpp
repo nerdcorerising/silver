@@ -115,12 +115,13 @@ namespace ast
         newLine(out, 0);
     }
 
-    Function::Function(shared_ptr<BlockNode> block, string name, vector<shared_ptr<Argument>> arguments, string returnType, bool isLocal) :
+    Function::Function(shared_ptr<BlockNode> block, string name, vector<shared_ptr<Argument>> arguments, string returnType, bool isLocal, Visibility visibility) :
         mBlock(block),
         mName(name),
         mArgs(arguments),
         mReturnType(returnType),
-        mIsLocal(isLocal)
+        mIsLocal(isLocal),
+        mVisibility(visibility)
     {
         ASSERT(mBlock != nullptr);
     }
@@ -138,6 +139,11 @@ namespace ast
     bool Function::isLocal() const
     {
         return mIsLocal;
+    }
+
+    Visibility Function::getVisibility() const
+    {
+        return mVisibility;
     }
 
     size_t Function::argCount()
