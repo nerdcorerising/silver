@@ -3,7 +3,9 @@
     "allow": [
       "Bash(build.cmd)",
       "Bash(cmd //c build.cmd:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)"
     ]
   }
 }
